@@ -175,3 +175,41 @@ morning of the event. Both are logged.
 an apostrophe. §3.3 makes the CSV the escape hatch, which means it gets opened in Excel
 by a stressed organizer; a problem statement beginning with "=" should not become a
 formula.
+
+---
+
+## Typography: two webfonts, loaded non-blocking
+
+§9 asks for calm, legible, and fast, with real type hierarchy. The first pass used the
+system font stack, which is fast but reads as unstyled — and on an internal tool that
+people fill in once, "unstyled" reads as "thrown together", which is exactly the wrong
+signal above a question about someone's own capability.
+
+Chosen: **Newsreader** for headings (a warm, low-contrast serif — it gives the form a
+human voice, which matters directly under the sentence saying this is not a performance
+assessment) and **Public Sans** for body and UI (highly legible at small sizes on a
+phone, neutral without being the default everyone reaches for).
+
+Both are loaded from Google Fonts with `display=swap` and `preconnect`, so text paints
+immediately in the fallback stack and swaps when the font arrives. Nothing blocks
+rendering — which is the actual requirement behind "participants will fill this in on
+phones with bad conference wifi", and matters more than the two extra requests.
+
+## "Required" is a word, not an asterisk
+
+A bare red `*` is a convention the reader has to decode, and it carries meaning by colour
+alone. The `.req` element renders as a small "REQUIRED" chip and `.optional` as a muted
+"OPTIONAL" one, so the state is legible without relying on colour and without a legend.
+Done in CSS against the existing markup, so no view had to change.
+
+## Still open: the capability section repeats its descriptors twenty times
+
+Four axes times five levels, with the full scale descriptor on every option, makes the
+form about 4700px tall on a phone. §5 requires the descriptors to be inline and always
+visible rather than in a tooltip, so they cannot be hidden.
+
+Tightened the spacing as far as it goes without cramping (roughly 8% shorter). The real
+fix is structural — show the 1–5 scale once as an always-visible legend, then render the
+four axes as compact segmented rows — which still satisfies "always visible" and would cut
+the section by more than half. That is a change to the form's markup rather than its
+stylesheet, and is worth doing before the invites go out.
