@@ -125,7 +125,7 @@ const LAST_NAMES = [
   'Abbas', 'Adeyemi', 'Ahmed', 'Alvarez', 'Baptiste', 'Bennett', 'Bergman', 'Chan', 'Clarke', 'Costa',
   'Dawson', 'Dias', 'Duarte', 'Ellis', 'Farrell', 'Fischer', 'Gallagher', 'Gomez', 'Hale', 'Haruna',
   'Iqbal', 'Jensen', 'Kaur', 'Keane', 'Kowalski', 'Lam', 'Lindqvist', 'Mahmood', 'Marsh', 'Mbeki',
-  'Mendes', 'Moreau', 'Nakamura', 'Nowak', 'Okafor', 'Osei', 'Patel', 'Quinn', 'Rahman', 'Reyes',
+  'Mendes', 'Moreau', "O'Brien", 'Nakamura', 'Nowak', 'Okafor', 'Osei', 'Patel', 'Quinn', 'Rahman', 'Reyes',
   'Santos', 'Sharma', 'Silva', 'Sullivan', 'Tan', 'Thompson', 'Vasquez', 'Walsh', 'Whitfield', 'Yusuf',
 ];
 
@@ -168,16 +168,16 @@ const ARCHETYPES: {
 
 /** Latent [0,1] → 1..5. Tuned so most people land on 1–3 and 5s stay rare. */
 function toScore(latent: number): number {
-  if (latent < 0.14) return 1;
-  if (latent < 0.36) return 2;
-  if (latent < 0.6) return 3;
-  if (latent < 0.82) return 4;
+  if (latent < 0.17) return 1;
+  if (latent < 0.42) return 2;
+  if (latent < 0.7) return 3;
+  if (latent < 0.91) return 4;
   return 5;
 }
 
 function skillsFor(rng: Rng): [number, number, number, number] {
   // Pow > 1 pushes the mass toward the low end: self-assessments come back modest.
-  const base = Math.pow(rng.next(), 1.6);
+  const base = Math.pow(rng.next(), 1.9);
   const archetype = pickWeighted(rng, ARCHETYPES);
   const out: number[] = [];
   for (const offset of archetype.offsets) {
@@ -203,24 +203,26 @@ interface ThemeTemplate {
 
 const OPENERS = [
   'Every week we',
-  'A big chunk of my week goes on this:',
+  'Most weeks we',
   'The thing that eats my time is that we',
-  'Right now the team',
-  'Honestly, the most frustrating part of my job is that we',
+  'Right now we',
+  "Honestly, the most frustrating part of my job is that we",
   'Across the team we',
   'For as long as I have been here we',
   'It sounds small, but we',
+  'In my service we still',
+  'My team and I still',
 ];
 
 const CLOSERS = [
-  'I would like to see whether AI could take the first pass and leave us to check it.',
-  'I want to find out if this can be mostly automated without losing the audit trail.',
-  'Even getting a rough draft out of this automatically would give the team hours back.',
-  'I would like to build something my colleagues could actually use, not just a demo.',
-  'I want to understand what is realistic here before we ask for budget.',
-  'If we could cut the manual step out entirely that would change how the team works.',
-  'I am hoping to leave the day with something we can pilot in one service area.',
-  'I would like to try this on real examples and see where it falls over.',
+  "I'd like to see whether AI could take the first pass and leave us to check it.",
+  'I want to find out how much of this can be automated without losing the audit trail.',
+  'Even a rough first draft coming out automatically would give the team hours back.',
+  "I'd like to build something my colleagues would actually use, not just a demo.",
+  "I want to understand what's realistic here before we ask anyone for budget.",
+  'If we could cut the manual step out entirely, that would change how the team works.',
+  "I'm hoping to leave the day with something we can pilot in one service area.",
+  "I'd like to try this on real examples and see where it falls over.",
 ];
 
 const THEMES: ThemeTemplate[] = [
@@ -229,7 +231,7 @@ const THEMES: ThemeTemplate[] = [
     category: 'automate',
     cores: [
       're-key supplier invoices from {inbox} into {system} by hand, line by line',
-      'chase purchase orders that do not match the invoice, which means {count} emails a week',
+      'chase purchase orders that do not match the invoice, which is {count} emails a week',
       'check every invoice against the contract before it can be approved in {system}',
       'reconcile {artifact} against {system} at month end, and the mismatches are always the same handful of suppliers',
     ],
@@ -244,7 +246,7 @@ const THEMES: ThemeTemplate[] = [
     key: 'policy-lookup',
     category: 'search',
     cores: [
-      'cannot find the current version of a policy without asking {who}, and half the time they are on leave',
+      "cannot find the current version of a policy without asking {who}, and half the time they're on leave",
       'answer the same questions about {topic} because the guidance is spread across {places}',
       'have to read through {artifact} to find one clause, and nobody is confident it is the latest one',
       'lose time hunting for precedent decisions on {topic} that we know somebody has already made',
@@ -261,12 +263,13 @@ const THEMES: ThemeTemplate[] = [
     category: 'analysis',
     cores: [
       'assemble the {cadence} report by hand from {sources}, and it takes two full days',
-      'copy the same figures into the same slides every {cadence} before anyone looks at them',
+      'copy the same figures into the same slides every {period} before anyone reads them',
       'produce performance packs where the numbers are right but the commentary is written from scratch each time',
       'pull {sources} together just to answer one question from {who}',
     ],
     slots: {
       cadence: ['monthly', 'quarterly', 'weekly'],
+      period: ['month', 'week', 'quarter'],
       sources: ['four separate exports', 'three systems that do not talk to each other', 'the case system and two spreadsheets'],
       who: ['a committee', 'the leadership team', 'an external auditor'],
     },
@@ -277,7 +280,7 @@ const THEMES: ThemeTemplate[] = [
     cores: [
       'take the same {count} enquiries about {topic} every week, and most of them have a published answer already',
       'want residents to be able to check {topic} themselves instead of waiting in a phone queue',
-      'triage incoming requests by reading each one, when the routing rules are basically known',
+      'triage incoming requests by reading every one, when the routing rules are basically known',
       'send a holding reply to {topic} enquiries because nobody can get to them the same day',
     ],
     slots: {
@@ -290,7 +293,7 @@ const THEMES: ThemeTemplate[] = [
     category: 'content',
     cores: [
       'write near-identical {artifact} from a blank page every time, when 80% of the wording never changes',
-      'spend an afternoon turning rough notes into a {artifact} that follows our tone of voice',
+      'spend an afternoon turning rough notes into {artifact} that follow our tone of voice',
       'rewrite the same {artifact} for three different audiences, and the plain-English version always slips',
       'draft {artifact} under time pressure, which is exactly when the quality drops',
     ],
@@ -310,20 +313,20 @@ const THEMES: ThemeTemplate[] = [
     slots: {
       artifact: ['an export full of inconsistent addresses', 'a returns spreadsheet', 'the supplier list', 'survey responses'],
       sources: ['two case systems', 'a CRM and a finance export', 'the old and new databases'],
-      who: ['the whole service', 'three teams', 'our reporting'],
+      who: ['the whole service', 'three other teams', 'our reporting'],
     },
   },
   {
     key: 'onboarding',
     category: 'search',
     cores: [
-      'walk every new starter through the same {topic} because the induction material is scattered',
-      'lose knowledge when someone leaves, since {topic} only ever lived in their head',
+      'walk every new starter through the same explanation of {topic}, because the induction material is scattered',
+      'lose knowledge when someone leaves, because {topic} only ever lived in their head',
       'have induction notes that are two reorganisations out of date, and nobody owns updating them',
       'answer the same first-week questions about {topic} in {places}',
     ],
     slots: {
-      topic: ['systems access', 'who approves what', 'the case handling process', 'local procedures'],
+      topic: ['systems access', 'the approval routes', 'the case handling process', 'local procedures'],
       places: ['Teams chats', 'a 40-page handbook', 'one-to-one calls'],
     },
   },
@@ -332,12 +335,13 @@ const THEMES: ThemeTemplate[] = [
     category: 'automate',
     cores: [
       'build the {cadence} rota by hand around leave, skills and site coverage, and one change breaks the lot',
-      'juggle appointment slots across {count} staff on a whiteboard, then re-type it into {system}',
-      'match visits to the right qualified officer, which is a puzzle somebody solves manually every {cadence}',
+      'juggle appointment slots for {count} staff on a whiteboard, then re-type it into {system}',
+      'match visits to the right qualified officer, which is a puzzle somebody solves by hand every {period}',
       'redo the schedule whenever someone calls in sick, usually before 8am',
     ],
     slots: {
       cadence: ['weekly', 'fortnightly', 'monthly'],
+      period: ['week', 'fortnight', 'month'],
       count: ['twelve', 'twenty', 'thirty-odd'],
       system: ['the scheduling system', 'the shared calendar', 'the works order system'],
     },
@@ -351,8 +355,8 @@ const HOPES = [
   'To meet people outside my department who have the same problem.',
   'A clearer sense of what AI is genuinely good at and what it is not.',
   'One thing removed from my to-do list permanently.',
-  'To stop being the person who says "we should look into AI" and start doing it.',
-  'Hands-on practice — I have read plenty and built nothing.',
+  'To stop saying "we should look into AI" and start doing it.',
+  "Hands-on practice — I've read plenty and built nothing.",
   'A realistic view of what we could pilot this year.',
   'Something I can hand over to a colleague and have it still work.',
 ];
@@ -552,7 +556,7 @@ export interface Summary {
 
 export function summarize(rows: readonly FakeParticipant[], targetTeamSize = 4): Summary {
   const attending = rows.filter((r) => r.attending === 1);
-  const teamsAtTarget = Math.max(1, Math.round(attending.length / targetTeamSize));
+  const teamsAtTarget = attending.length === 0 ? 0 : Math.max(1, Math.round(attending.length / targetTeamSize));
   return {
     total: rows.length,
     attending: attending.length,
@@ -565,12 +569,17 @@ export function summarize(rows: readonly FakeParticipant[], targetTeamSize = 4):
   };
 }
 
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 /** One line, so an operator can see at a glance whether this pool is solvable. */
-export function summaryLine(s: Summary, seed: number, minLaptopsPerTeam = 2): string {
+export function summaryLine(s: Summary, seed: number, minLaptopsPerTeam = 2, targetTeamSize = 4): string {
   return (
     `seed ${seed}: ${s.total} rows — ${s.attending} attending, ${s.unsure} not sure, ${s.declined} declined, ` +
-    `${s.noResponse} no response | ${s.laptops} laptops, ${s.builders} rate Building 3+ | ` +
-    `${s.teamsAtTarget} teams of 4 need ${s.teamsAtTarget} builders and ${s.teamsAtTarget * minLaptopsPerTeam} laptops`
+    `${s.noResponse} no response. Of the ${s.attending} attending, ${s.laptops} can bring a laptop and ` +
+    `${s.builders} rate Building 3+; that is ${plural(s.teamsAtTarget, 'team')} of ${targetTeamSize}, needing ` +
+    `${plural(s.teamsAtTarget, 'builder')} and ${plural(s.teamsAtTarget * minLaptopsPerTeam, 'laptop')}.`
   );
 }
 
@@ -613,9 +622,9 @@ interface CliOptions {
 function parseArgs(argv: readonly string[]): CliOptions {
   const opts: CliOptions = { count: 60, seed: 1, out: null, reset: false, help: false };
 
-  const readNumber = (flag: string, raw: string | undefined): number => {
+  const readNumber = (flag: string, example: string, raw: string | undefined): number => {
     if (raw === undefined || raw.trim() === '') {
-      throw new Error(`${flag} needs a number, e.g. ${flag} 60`);
+      throw new Error(`${flag} needs a number, e.g. ${flag} ${example}`);
     }
     const n = Number(raw);
     if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
@@ -643,10 +652,10 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case '-n':
       case '--count':
-        opts.count = readNumber('--count', takeValue());
+        opts.count = readNumber('--count', '60', takeValue());
         break;
       case '--seed':
-        opts.seed = readNumber('--seed', takeValue());
+        opts.seed = readNumber('--seed', '1', takeValue());
         break;
       case '--out': {
         const value = takeValue();

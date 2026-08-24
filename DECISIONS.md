@@ -213,3 +213,104 @@ fix is structural — show the 1–5 scale once as an always-visible legend, the
 four axes as compact segmented rows — which still satisfies "always visible" and would cut
 the section by more than half. That is a change to the form's markup rather than its
 stylesheet, and is worth doing before the invites go out.
+
+---
+
+# Decisions taken while building
+
+## Publishing locks deletion, not editing — a deliberate deviation from §7
+
+§7 says "Publish locks the run and makes it the canonical one." Taken literally, that
+would freeze the team arrangement at exactly the moment it most needs to change: §7 also
+says the drag interaction is "the single most important interaction in the app — the
+day-of reality is no-shows", and no-shows happen after teams are published, not before.
+
+So publish makes the run canonical and refuses deletion, but the board stays editable,
+with a banner saying that saved changes go live on `/teams` immediately. The two
+sentences in §7 pull in opposite directions; this resolves them in favour of the one
+about the morning of the event.
+
+## Draft order is lexicographic across the four axes, never a sum
+
+§6.5 says to snake draft "ordered by capability", and §3.1 forbids a scalar total. The
+order is therefore lexicographic: building, then prompting, then tools, then
+understanding, tie-broken on participant id. Building leads because seeding the strongest
+builders first is what front-loads H3.
+
+## Soft-score normalisation
+
+Cohesion, category and department shares are already 0..1. Skill diversity is the mean of
+the four per-axis population standard deviations divided by 2 (the maximum on a 1..5
+scale) → [0,1]. Across-team balance is the mean of the four per-axis variances of team
+means divided by 4, negated → [-1,0]. Negative zero is collapsed to zero so that two
+identical arrangements serialise identically.
+
+## Repair requires a strict fall in total hard cost
+
+Not merely "no increase". Two teams each holding exactly `min_laptops_per_team` would
+otherwise trade a laptop owner back and forth forever — a real cycle, found at n=53.
+Size violations are repaired before laptops, builders and novices, because size is
+structural and an oversized team late in the list would otherwise never be reached on a
+laptop-poor pool.
+
+## The form requires category and all four skill scales from anyone not declining
+
+§5 names only name, attending, email, problem statement and laptop as required. But a
+missing skill answer becomes a `1` in `toSolverParticipant`, which silently distorts team
+balance rather than failing loudly — and "Not sure yet" is a real category answer, so
+nobody is blocked. Only an explicit **No** exempts the rest of the form; "Not sure yet"
+is validated as attending.
+
+## CSV export ignores the table filters
+
+It always contains every participant and every column. A filtered export at 8am would
+silently lose people, and §3.3 makes this the escape hatch. The page says so under the
+toolbar. Values are human-readable (Attending / Declined / Not sure), the four skills
+stay four separate integer columns, and the personal link is included so links can be
+handed out from a spreadsheet.
+
+## Invite parsing detects a header by "no @ anywhere in the row"
+
+Checked before matching `mail`/`name` against cell text — otherwise a headerless first
+row like `Ada,ada@example.org` is eaten as a header. Headerless files find the email by
+the `@` and take the other non-empty cell as the name, so either column order works.
+Duplicate emails within one file are reported as skips rather than silently deduped, so
+the counts reconcile against the organizer's own file.
+
+## Email: never the same message to the same person twice on the same local day
+
+The rule applies to all three kinds, not just reminders. A single-participant invite
+resend is gated by "sent today" rather than "ever sent" — a hard ever-gate would make the
+Resend link button on the participants table permanently dead, while a stray double-click
+still cannot double-send.
+
+Bulk sends cap at 100 messages per invocation with a 250ms pause, and stop after five
+consecutive failures. Reserve-before-send makes a truncated batch safe to resume: anyone
+missed stays eligible, and the summary says to click again for the remainder. Bulk sends
+run in `waitUntil`, so the redirect states the plan rather than the outcome — the log
+table is the record of what actually happened.
+
+## Clustering call details
+
+`AI_GATEWAY_URL` must already include the provider path (`…/anthropic`); the SDK appends
+`/v1/messages`. Problem statements are truncated to 600 characters for the clustering
+call and 400 for the naming call — in the prompt only; D1 keeps the full text and both
+the admin UI and the CSV show it.
+
+The retry feeds the previous JSON back as an assistant turn plus a user turn listing the
+failed checks. That is an ordinary conversation turn, not an assistant prefill, which is
+not available on this model generation.
+
+Naming accepts partial answers: teams the model named are kept, the rest fall back to
+`Team N` with the theme summary as the brief. By the time naming runs the teams are
+already correct, so this step must never be able to fail a run.
+
+## Seed data is generated from a fixed clock
+
+Timestamps come from a fixed window (invites sent 2026-08-03, responses spread over 12
+days) rather than `Date.now()` — "same seed, same output" cannot hold if the clock is an
+input. Skills are drawn from one low-skewed latent ability plus a weighted archetype tilt
+(newcomer / reader / power-user / tinkerer / builder). The archetypes are what make
+"strong prompting, weak building" a real subpopulation rather than noise, which is the
+whole reason the four axes exist: at n=4000, 173 people rate prompting ≥4 with building
+≤2, against 58 the other way round.
