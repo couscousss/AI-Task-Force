@@ -1,4 +1,882 @@
 import { Hono } from 'hono';
 import type { AppBindings } from '../env';
+import {
+  ATTENDING,
+  CATEGORIES,
+  SKILL_AXES,
+  SKILL_AXIS_LABELS,
+  SKILL_SCALE,
+  categoryLabel,
+  loadConfig,
+  type EventConfig,
+  type SkillAxis,
+} from '../config';
+import type { ParticipantRow } from '../types';
+import { getByEmail, getByToken, saveSubmission, type FormSubmission } from '../db/participants';
+import { formatLocalDate, formatLocalDateTime, isPast } from '../lib/dates';
+import { verifyTurnstile } from '../lib/turnstile';
+import {
+  checkProblemStatement,
+  isValidCategory,
+  isValidEmail,
+  isValidSkill,
+  normalizeEmail,
+  squish,
+} from '../lib/validation';
+import { Callout, Card, Layout } from '../ui/layout';
 
 export const participantRoutes = new Hono<AppBindings>();
+
+/* ------------------------------------------------------------------ shapes */
+
+/** Every value the form can hold, as strings, so a failed submit can be re-rendered verbatim. */
+interface Values {
+  name: string;
+  attending: string;
+  email: string;
+  department: string;
+  problem_statement: string;
+  category: string;
+  skills: Record<SkillAxis, string>;
+  has_personal_laptop: string;
+  hopes: string;
+}
+
+type Errors = Record<string, string>;
+
+interface FieldMeta {
+  label: string;
+  anchor: string;
+}
+
+/** Insertion order is the order the error summary lists problems in. */
+const FIELD_META: Record<string, FieldMeta> = {
+  name: { label: 'Your name', anchor: 'name' },
+  attending: { label: 'Are you attending?', anchor: 'field-attending' },
+  email: { label: 'Your email', anchor: 'email' },
+  department: { label: 'Department or team', anchor: 'department' },
+  problem_statement: { label: 'The work challenge', anchor: 'problem_statement' },
+  category: { label: 'What you want to explore', anchor: 'category' },
+  skill_understanding: { label: 'AI Understanding', anchor: 'field-skill-understanding' },
+  skill_tools: { label: 'AI Tools', anchor: 'field-skill-tools' },
+  skill_prompting: { label: 'Prompting', anchor: 'field-skill-prompting' },
+  skill_building: { label: 'Building / Technical', anchor: 'field-skill-building' },
+  has_personal_laptop: { label: 'Bringing a laptop', anchor: 'field-laptop' },
+  hopes: { label: 'What you hope to walk away with', anchor: 'hopes' },
+  turnstile: { label: 'The check that you are a person', anchor: 'field-turnstile' },
+};
+
+const ATTENDING_OPTIONS: { value: string; label: string; desc?: string }[] = [
+  { value: String(ATTENDING.yes), label: "Yes, I'll be there" },
+  { value: String(ATTENDING.no), label: "No, I can't make it" },
+  {
+    value: String(ATTENDING.unsure),
+    label: 'Not sure yet',
+    desc: 'Fill in the rest anyway — it keeps your place while you find out.',
+  },
+];
+
+/** 'notyet' and 'closed' both render the form read-only; only 'open' accepts a POST. */
+type Phase = 'notyet' | 'open' | 'closed';
+
+function phaseOf(cfg: EventConfig, now: Date = new Date()): Phase {
+  if (!isPast(cfg.formOpens, now)) return 'notyet';
+  if (isPast(cfg.formDeadline, now)) return 'closed';
+  return 'open';
+}
+
+/* --------------------------------------------------------------- utilities */
+
+function skillOf(row: ParticipantRow, axis: SkillAxis): number | null {
+  switch (axis) {
+    case 'understanding':
+      return row.skill_understanding;
+    case 'tools':
+      return row.skill_tools;
+    case 'prompting':
+      return row.skill_prompting;
+    case 'building':
+      return row.skill_building;
+  }
+}
+
+function numOrEmpty(v: number | null): string {
+  return v === null ? '' : String(v);
+}
+
+function valuesFromRow(row: ParticipantRow): Values {
+  return {
+    name: row.name ?? '',
+    attending: numOrEmpty(row.attending),
+    email: row.email,
+    department: row.department ?? '',
+    problem_statement: row.problem_statement ?? '',
+    category: row.category ?? '',
+    skills: {
+      understanding: numOrEmpty(row.skill_understanding),
+      tools: numOrEmpty(row.skill_tools),
+      prompting: numOrEmpty(row.skill_prompting),
+      building: numOrEmpty(row.skill_building),
+    },
+    has_personal_laptop: numOrEmpty(row.has_personal_laptop),
+    hopes: row.hopes ?? '',
+  };
+}
+
+function bodyField(body: Record<string, unknown>, key: string): string {
+  const v = body[key];
+  return typeof v === 'string' ? v : '';
+}
+
+function valuesFromBody(body: Record<string, unknown>): Values {
+  return {
+    name: bodyField(body, 'name'),
+    attending: bodyField(body, 'attending'),
+    email: bodyField(body, 'email'),
+    department: bodyField(body, 'department'),
+    problem_statement: bodyField(body, 'problem_statement'),
+    category: bodyField(body, 'category'),
+    skills: {
+      understanding: bodyField(body, 'skill_understanding'),
+      tools: bodyField(body, 'skill_tools'),
+      prompting: bodyField(body, 'skill_prompting'),
+      building: bodyField(body, 'skill_building'),
+    },
+    has_personal_laptop: bodyField(body, 'has_personal_laptop'),
+    hopes: bodyField(body, 'hopes'),
+  };
+}
+
+function attendingLabel(v: number | null): string {
+  if (v === ATTENDING.yes) return 'Yes';
+  if (v === ATTENDING.no) return 'No';
+  if (v === ATTENDING.unsure) return 'Not sure yet';
+  return 'Not answered';
+}
+
+function skillText(v: number | null): string {
+  if (v === null) return 'Not answered';
+  const step = SKILL_SCALE.find((s) => s.value === v);
+  return step ? `${v} — ${step.name}` : String(v);
+}
+
+function fieldClass(err: string | undefined): string {
+  return err ? 'field field-invalid' : 'field';
+}
+
+function describedBy(...ids: (string | undefined | false)[]): string | undefined {
+  const list = ids.filter((s): s is string => typeof s === 'string' && s !== '');
+  return list.length > 0 ? list.join(' ') : undefined;
+}
+
+/* ------------------------------------------------------------- page pieces */
+
+function organizerContact(cfg: EventConfig) {
+  const to = cfg.organizerEmails[0];
+  return to ? (
+    <p>
+      Something wrong? Email the organizers at <a href={`mailto:${to}`}>{to}</a> and they can change it
+      for you.
+    </p>
+  ) : (
+    <p>Something wrong? Contact the organizers and they can change it for you.</p>
+  );
+}
+
+function errorSummary(errors: Errors) {
+  const items = Object.entries(FIELD_META)
+    .map(([key, meta]) => ({ meta, message: errors[key] }))
+    .filter((i): i is { meta: FieldMeta; message: string } => typeof i.message === 'string');
+  if (items.length === 0) return null;
+  return (
+    <Callout tone="bad" title="Not saved yet">
+      <p>
+        {items.length === 1
+          ? 'One answer needs fixing, then this will save:'
+          : `${items.length} answers need fixing, then this will save:`}
+      </p>
+      <ul>
+        {items.map((i) => (
+          <li>
+            <a href={`#${i.meta.anchor}`}>{i.meta.label}</a> — {i.message}
+          </li>
+        ))}
+      </ul>
+    </Callout>
+  );
+}
+
+interface FormPageProps {
+  cfg: EventConfig;
+  row: ParticipantRow;
+  values: Values;
+  errors: Errors;
+  phase: Phase;
+  /** Set when a POST was refused outright (closed form, failed bot check): says so at the top. */
+  blocked?: string;
+}
+
+function FormPage({ cfg, row, values: v, errors, phase, blocked }: FormPageProps) {
+  const readOnly = phase !== 'open';
+  const deadline = formatLocalDateTime(cfg.formDeadline, cfg.localUtcOffsetHours);
+  const opens = formatLocalDateTime(cfg.formOpens, cfg.localUtcOffsetHours);
+  const eventDay = formatLocalDate(cfg.eventDate, cfg.localUtcOffsetHours);
+  const head = cfg.turnstileSiteKey ? (
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  ) : undefined;
+
+  return (
+    <Layout
+      title={`Check in — ${cfg.eventName}`}
+      head={head}
+      scripts={readOnly ? undefined : ['/form.js']}
+    >
+      <main class="narrow" id="main">
+        <h1>{cfg.eventName}</h1>
+        <p class="lede">
+          {phase === 'open'
+            ? `${eventDay}. Tell us whether you can make it and what you would like to build. Three minutes, and you can come back to this link and change anything until ${deadline}.`
+            : `${eventDay}. This is your personal check-in form.`}
+        </p>
+
+        {phase === 'notyet' ? (
+          <Callout tone="info" title="Not open yet">
+            <p>
+              This form opens on {opens}. Come back to this same link then — it will still work, and
+              nothing you type before then is saved.
+            </p>
+          </Callout>
+        ) : null}
+
+        {phase === 'closed' ? (
+          <Callout tone="warn" title="The form has closed">
+            <p>
+              Answers closed on {deadline}, so this is now read-only.{' '}
+              {row.submitted_at
+                ? 'Everything you told us is below, and it still counts.'
+                : 'We did not get an answer from you before then.'}
+            </p>
+            {organizerContact(cfg)}
+          </Callout>
+        ) : null}
+
+        {blocked ? (
+          <Callout tone="bad" title="Not saved">
+            <p>{blocked}</p>
+          </Callout>
+        ) : null}
+
+        {!blocked ? errorSummary(errors) : null}
+
+        {phase === 'open' && row.submitted_at && Object.keys(errors).length === 0 ? (
+          <Callout tone="good" title="Saved">
+            <p>We have your answers. Change anything below and save again — the newest version wins.</p>
+          </Callout>
+        ) : null}
+
+        <form method="post" action={`/r/${row.token}`} id="checkin-form">
+          {/* 1. Name */}
+          <div class={fieldClass(errors['name'])}>
+            <label for="name">
+              Your name <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={v.name}
+              autocomplete="name"
+              required
+              disabled={readOnly}
+              aria-invalid={errors['name'] ? 'true' : undefined}
+              aria-describedby={describedBy(errors['name'] && 'err-name')}
+            />
+            {errors['name'] ? (
+              <p class="error-text" id="err-name">
+                {errors['name']}
+              </p>
+            ) : null}
+          </div>
+
+          {/* 2. Attending */}
+          <fieldset
+            id="field-attending"
+            class={errors['attending'] ? 'field-invalid' : undefined}
+            aria-invalid={errors['attending'] ? 'true' : undefined}
+            aria-describedby={describedBy(errors['attending'] && 'err-attending')}
+          >
+            <legend class="fieldset-legend">
+              Are you attending? <span class="req" aria-hidden="true">*</span>
+            </legend>
+            <div class="choices">
+              {ATTENDING_OPTIONS.map((o) => (
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="attending"
+                    value={o.value}
+                    checked={v.attending === o.value}
+                    required
+                    disabled={readOnly}
+                  />
+                  <span>
+                    <span class="choice-label">{o.label}</span>
+                    {o.desc ? <span class="choice-desc">{o.desc}</span> : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {errors['attending'] ? (
+              <p class="error-text" id="err-attending">
+                {errors['attending']}
+              </p>
+            ) : null}
+          </fieldset>
+
+          {/* 3. Email — stays visible even for a decline: it is how we know who you are. */}
+          <div class={fieldClass(errors['email'])}>
+            <label for="email">
+              Your email <span class="req" aria-hidden="true">*</span>
+            </label>
+            <p class="hint" id="email-hint">
+              Where we will send your team and the joining details.
+            </p>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={v.email}
+              autocomplete="email"
+              required
+              disabled={readOnly}
+              aria-invalid={errors['email'] ? 'true' : undefined}
+              aria-describedby={describedBy('email-hint', errors['email'] && 'err-email')}
+            />
+            {errors['email'] ? (
+              <p class="error-text" id="err-email">
+                {errors['email']}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Everything below is skipped for a decline. form.js hides it; the server never
+              requires it when the answer is No. */}
+          <div id="attending-details">
+            {/* 4. Department */}
+            <div class={fieldClass(errors['department'])}>
+              <label for="department">
+                Department or team <span class="optional">optional</span>
+              </label>
+              <p class="hint" id="department-hint">
+                We use it to mix people from different parts of the organisation.
+              </p>
+              <input
+                type="text"
+                id="department"
+                name="department"
+                value={v.department}
+                autocomplete="organization-title"
+                disabled={readOnly}
+                aria-invalid={errors['department'] ? 'true' : undefined}
+                aria-describedby={describedBy('department-hint', errors['department'] && 'err-department')}
+              />
+              {errors['department'] ? (
+                <p class="error-text" id="err-department">
+                  {errors['department']}
+                </p>
+              ) : null}
+            </div>
+
+            {/* 5. Problem statement */}
+            <div class={fieldClass(errors['problem_statement'])}>
+              <label for="problem_statement">
+                What work challenge or process would you like to improve or explore using AI?{' '}
+                <span class="req" aria-hidden="true">*</span>
+              </label>
+              <p class="hint" id="problem-hint">
+                Two or three sentences is plenty. Say what the task is and what makes it slow, repetitive
+                or error-prone today. This is what we build the teams around, so it is the answer that
+                matters most.
+              </p>
+              <details class="examples">
+                <summary>See examples</summary>
+                <ul>
+                  <li>
+                    Every month I copy figures out of four spreadsheets into the ops report by hand. It
+                    takes most of a day and I still miss things.
+                  </li>
+                  <li>
+                    New starters ask the same thirty questions and we answer each one from scratch. I would
+                    like something that answers them from our handbook.
+                  </li>
+                  <li>
+                    Supplier contracts arrive as PDFs and someone has to read each one to find the renewal
+                    date and notice period.
+                  </li>
+                </ul>
+              </details>
+              <textarea
+                id="problem_statement"
+                name="problem_statement"
+                rows={7}
+                disabled={readOnly}
+                aria-invalid={errors['problem_statement'] ? 'true' : undefined}
+                aria-describedby={describedBy(
+                  'problem-hint',
+                  errors['problem_statement'] && 'err-problem_statement',
+                )}
+              >
+                {`\n${v.problem_statement}`}
+              </textarea>
+              <p class="hint small" id="problem_count" hidden></p>
+              {errors['problem_statement'] ? (
+                <p class="error-text" id="err-problem_statement">
+                  {errors['problem_statement']}
+                </p>
+              ) : null}
+            </div>
+
+            {/* 6. Category */}
+            <div class={fieldClass(errors['category'])}>
+              <label for="category">
+                What would you like to explore or build? <span class="req" aria-hidden="true">*</span>
+              </label>
+              <p class="hint" id="category-hint">
+                The closest fit is fine — "Not sure yet" is a real answer.
+              </p>
+              <select
+                id="category"
+                name="category"
+                disabled={readOnly}
+                aria-invalid={errors['category'] ? 'true' : undefined}
+                aria-describedby={describedBy('category-hint', errors['category'] && 'err-category')}
+              >
+                <option value="">Choose one</option>
+                {CATEGORIES.map((c) => (
+                  <option value={c.value} selected={v.category === c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              {errors['category'] ? (
+                <p class="error-text" id="err-category">
+                  {errors['category']}
+                </p>
+              ) : null}
+            </div>
+
+            {/* 7. Capability */}
+            <h2>Your AI capability today</h2>
+            <Callout tone="info" title="Who sees this">
+              <p>
+                The organizers are the only people who read these answers, and we use them for one thing:
+                putting a mix of experience on every team. It is not a performance assessment, it does not
+                go to your manager, and no one is ranked. Rate yourself as you actually are — an accurate
+                1 is far more useful to us than a hopeful 4.
+              </p>
+            </Callout>
+
+            {SKILL_AXES.map((axis) => {
+              const key = `skill_${axis}`;
+              const meta = SKILL_AXIS_LABELS[axis];
+              const err = errors[key];
+              return (
+                <div
+                  class={err ? 'scale field-invalid' : 'scale'}
+                  id={`field-${key.replace('_', '-')}`}
+                  role="radiogroup"
+                  aria-labelledby={`${key}-label`}
+                  aria-invalid={err ? 'true' : undefined}
+                  aria-describedby={describedBy(err && `err-${key}`)}
+                >
+                  <div class="scale-head" id={`${key}-label`}>
+                    <strong>{meta.label}</strong>
+                    <span>{meta.description}</span>
+                  </div>
+                  <div class="scale-options">
+                    {SKILL_SCALE.map((s) => (
+                      <label class="scale-option">
+                        <input
+                          type="radio"
+                          name={key}
+                          value={String(s.value)}
+                          checked={v.skills[axis] === String(s.value)}
+                          disabled={readOnly}
+                        />
+                        <span class="scale-num">{s.value}</span>
+                        <span class="scale-text">
+                          <strong>{s.name}</strong> <span>{s.description}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {err ? (
+                    <p class="error-text" id={`err-${key}`}>
+                      {err}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+
+            {/* 8. Laptop */}
+            <fieldset
+              id="field-laptop"
+              class={errors['has_personal_laptop'] ? 'field-invalid' : undefined}
+              aria-invalid={errors['has_personal_laptop'] ? 'true' : undefined}
+              aria-describedby={describedBy(
+                'laptop-hint',
+                errors['has_personal_laptop'] && 'err-has_personal_laptop',
+              )}
+            >
+              <legend class="fieldset-legend">
+                Can you bring a personal laptop? <span class="req" aria-hidden="true">*</span>
+              </legend>
+              <p class="hint" id="laptop-hint">
+                We ask because personal machines usually let you install tools and reach AI services that
+                locked-down corporate builds block. It changes what your team can actually build on the
+                day, so we make sure every team has enough of them.
+              </p>
+              <div class="choices">
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="has_personal_laptop"
+                    value="1"
+                    checked={v.has_personal_laptop === '1'}
+                    disabled={readOnly}
+                  />
+                  <span>
+                    <span class="choice-label">Yes, I can bring one</span>
+                  </span>
+                </label>
+                <label class="choice">
+                  <input
+                    type="radio"
+                    name="has_personal_laptop"
+                    value="0"
+                    checked={v.has_personal_laptop === '0'}
+                    disabled={readOnly}
+                  />
+                  <span>
+                    <span class="choice-label">No</span>
+                    <span class="choice-desc">Fine — we will put you with people who can.</span>
+                  </span>
+                </label>
+              </div>
+              {errors['has_personal_laptop'] ? (
+                <p class="error-text" id="err-has_personal_laptop">
+                  {errors['has_personal_laptop']}
+                </p>
+              ) : null}
+            </fieldset>
+
+            {/* 9. Hopes */}
+            <div class={fieldClass(errors['hopes'])}>
+              <label for="hopes">
+                What do you hope to walk away with? <span class="optional">optional</span>
+              </label>
+              <textarea
+                id="hopes"
+                name="hopes"
+                rows={4}
+                disabled={readOnly}
+                aria-invalid={errors['hopes'] ? 'true' : undefined}
+                aria-describedby={describedBy(errors['hopes'] && 'err-hopes')}
+              >
+                {`\n${v.hopes}`}
+              </textarea>
+              {errors['hopes'] ? (
+                <p class="error-text" id="err-hopes">
+                  {errors['hopes']}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {!readOnly && cfg.turnstileSiteKey ? (
+            <div class="field" id="field-turnstile">
+              <div class="cf-turnstile" data-sitekey={cfg.turnstileSiteKey}></div>
+              {errors['turnstile'] ? <p class="error-text">{errors['turnstile']}</p> : null}
+            </div>
+          ) : null}
+
+          {readOnly ? null : (
+            <div class="btn-row">
+              <button type="submit" class="btn btn-wide">
+                Save my answers
+              </button>
+            </div>
+          )}
+        </form>
+
+        {readOnly ? null : (
+          <p class="small muted">
+            You can reopen this link and change your answers until {deadline}.
+          </p>
+        )}
+      </main>
+    </Layout>
+  );
+}
+
+function AnswersTable({ row }: { row: ParticipantRow }) {
+  const rows: { label: string; value: string }[] = [
+    { label: 'Name', value: row.name ?? 'Not given' },
+    { label: 'Attending', value: attendingLabel(row.attending) },
+    { label: 'Email', value: row.email },
+  ];
+  if (row.attending !== ATTENDING.no) {
+    rows.push({ label: 'Department or team', value: (row.department ?? '').trim() || 'Not given' });
+    rows.push({ label: 'Work challenge', value: (row.problem_statement ?? '').trim() || 'Not given' });
+    rows.push({ label: 'Wants to explore', value: categoryLabel(row.category) });
+    for (const axis of SKILL_AXES) {
+      rows.push({ label: SKILL_AXIS_LABELS[axis].label, value: skillText(skillOf(row, axis)) });
+    }
+    rows.push({
+      label: 'Personal laptop',
+      value:
+        row.has_personal_laptop === 1 ? 'Yes' : row.has_personal_laptop === 0 ? 'No' : 'Not answered',
+    });
+    rows.push({ label: 'Hopes to walk away with', value: (row.hopes ?? '').trim() || 'Not given' });
+  }
+  return (
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          {rows.map((r) => (
+            <tr>
+              <th scope="row">{r.label}</th>
+              <td>{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ConfirmationPage({ cfg, row, phase }: { cfg: EventConfig; row: ParticipantRow; phase: Phase }) {
+  const declined = row.attending === ATTENDING.no;
+  const deadline = formatLocalDateTime(cfg.formDeadline, cfg.localUtcOffsetHours);
+  const eventDay = formatLocalDate(cfg.eventDate, cfg.localUtcOffsetHours);
+  return (
+    <Layout title={`Answers saved — ${cfg.eventName}`}>
+      <main class="narrow" id="main">
+        <h1>{declined ? 'Thanks for telling us' : 'Your answers are saved'}</h1>
+        <Callout tone="good" title="Saved">
+          {declined ? (
+            <p>
+              You are down as not attending, so there is nothing else to do. If your plans change, reopen
+              this link before {deadline} and change your answer.
+            </p>
+          ) : (
+            <p>
+              That is everything we need. We will email you your team and your project before {eventDay}.
+              You can change any of this until {deadline}.
+            </p>
+          )}
+        </Callout>
+
+        <Card title="What you told us">
+          <AnswersTable row={row} />
+        </Card>
+
+        {/* .grid picks up the `.card + .grid` top margin, so no bespoke spacing is needed. */}
+        <div class="grid">
+          <div class="btn-row">
+            {phase === 'open' ? (
+              <a class="btn btn-secondary" href={`/r/${row.token}`}>
+                Edit your answers
+              </a>
+            ) : null}
+          </div>
+        </div>
+        {phase === 'open' ? null : organizerContact(cfg)}
+      </main>
+    </Layout>
+  );
+}
+
+/** Deliberately says nothing about whether this token was ever real. */
+function UnknownLinkPage({ cfg }: { cfg: EventConfig }) {
+  return (
+    <Layout title={`Link not recognised — ${cfg.eventName}`}>
+      <main class="narrow" id="main">
+        <h1>That link did not work</h1>
+        <p>
+          Personal links end in a long code, and mail clients often break them across two lines. Go back
+          to the email, copy the whole link — including everything after the last slash — and paste it
+          into your browser in one piece.
+        </p>
+        {organizerContact(cfg)}
+      </main>
+    </Layout>
+  );
+}
+
+/* ---------------------------------------------------------------- handlers */
+
+participantRoutes.get('/r/:token', async (c) => {
+  const cfg = loadConfig(c.env);
+  const row = await getByToken(c.env.DB, c.req.param('token'));
+  if (!row) return c.html(<UnknownLinkPage cfg={cfg} />, 404);
+
+  const phase = phaseOf(cfg);
+  if (c.req.query('saved') === '1' && row.submitted_at) {
+    return c.html(<ConfirmationPage cfg={cfg} row={row} phase={phase} />);
+  }
+  return c.html(<FormPage cfg={cfg} row={row} values={valuesFromRow(row)} errors={{}} phase={phase} />);
+});
+
+participantRoutes.post('/r/:token', async (c) => {
+  const cfg = loadConfig(c.env);
+  const row = await getByToken(c.env.DB, c.req.param('token'));
+  if (!row) return c.html(<UnknownLinkPage cfg={cfg} />, 404);
+
+  const phase = phaseOf(cfg);
+  if (phase !== 'open') {
+    // Show what we already hold rather than what they just typed — nothing was saved.
+    return c.html(
+      <FormPage
+        cfg={cfg}
+        row={row}
+        values={valuesFromRow(row)}
+        errors={{}}
+        phase={phase}
+        blocked={
+          phase === 'closed'
+            ? `Nothing was saved — the form closed on ${formatLocalDateTime(cfg.formDeadline, cfg.localUtcOffsetHours)}. What is shown below is what we already have.`
+            : `Nothing was saved — the form does not open until ${formatLocalDateTime(cfg.formOpens, cfg.localUtcOffsetHours)}.`
+        }
+      />,
+      403,
+    );
+  }
+
+  const body = await c.req.parseBody();
+  const v = valuesFromBody(body);
+  const errors: Errors = {};
+
+  if (cfg.turnstileSiteKey) {
+    const ok = await verifyTurnstile(
+      c.env,
+      bodyField(body, 'cf-turnstile-response') || null,
+      c.req.header('CF-Connecting-IP') ?? null,
+    );
+    if (!ok) {
+      errors['turnstile'] =
+        'The check that you are a person did not complete. Reload this page, tick the box, and save again.';
+      return c.html(
+        <FormPage
+          cfg={cfg}
+          row={row}
+          values={v}
+          errors={errors}
+          phase={phase}
+          blocked={errors['turnstile']}
+        />,
+        400,
+      );
+    }
+  }
+
+  const name = squish(v.name);
+  if (name === '') errors['name'] = 'Add your name so the organizers know whose answers these are.';
+  else if (name.length > 120) errors['name'] = 'That is too long for the name field — 120 characters or fewer.';
+
+  const attendingRaw = v.attending;
+  const attending =
+    attendingRaw === String(ATTENDING.yes)
+      ? ATTENDING.yes
+      : attendingRaw === String(ATTENDING.no)
+        ? ATTENDING.no
+        : attendingRaw === String(ATTENDING.unsure)
+          ? ATTENDING.unsure
+          : null;
+  if (attending === null) {
+    errors['attending'] = 'Pick one: yes, no, or not sure yet. "Not sure yet" still keeps your place.';
+  }
+
+  const email = normalizeEmail(v.email);
+  if (email === '') {
+    errors['email'] = 'Add your email — it is how we send you your team.';
+  } else if (!isValidEmail(email)) {
+    errors['email'] = 'That does not look like an email address. Check for a missing @ or a typo in the domain.';
+  } else if (email !== row.email) {
+    const clash = await getByEmail(c.env.DB, email);
+    if (clash && clash.id !== row.id) {
+      errors['email'] =
+        'We already have a separate form for that address. Use the personal link that was emailed to it, or ask the organizers to merge the two.';
+    }
+  }
+
+  const department = squish(v.department);
+  if (department.length > 120) {
+    errors['department'] = 'That is too long — 120 characters or fewer.';
+  }
+
+  // A decline is a complete answer. Everything below is optional in that case, and the
+  // server is the authority: form.js only hides these fields, it never enforces anything.
+  const declining = attending === ATTENDING.no;
+
+  const problemStatement = v.problem_statement.trim();
+  if (!declining) {
+    const check = checkProblemStatement(problemStatement);
+    if (!check.ok) errors['problem_statement'] = check.message ?? 'Please describe the challenge.';
+  }
+
+  const category = isValidCategory(v.category) ? v.category : null;
+  if (!declining && category === null) {
+    errors['category'] = 'Choose the closest fit. "Not sure yet" is a real answer.';
+  }
+
+  const skillValues: Partial<Record<SkillAxis, number>> = {};
+  for (const axis of SKILL_AXES) {
+    const raw = v.skills[axis];
+    if (isValidSkill(raw)) {
+      skillValues[axis] = Number(raw);
+    } else if (!declining) {
+      errors[`skill_${axis}`] = `Pick a level for ${SKILL_AXIS_LABELS[axis].label}. Your honest guess is the right answer.`;
+    }
+  }
+  const understanding = skillValues.understanding;
+  const tools = skillValues.tools;
+  const prompting = skillValues.prompting;
+  const building = skillValues.building;
+  const skills =
+    understanding !== undefined && tools !== undefined && prompting !== undefined && building !== undefined
+      ? { understanding, tools, prompting, building }
+      : null;
+
+  const laptop = v.has_personal_laptop === '1' ? 1 : v.has_personal_laptop === '0' ? 0 : null;
+  if (!declining && laptop === null) {
+    errors['has_personal_laptop'] =
+      'Say yes or no. Teams are built around who can bring a machine, so we cannot leave this blank.';
+  }
+
+  const hopes = v.hopes.trim();
+  if (hopes.length > 2000) {
+    errors['hopes'] = 'That is longer than we can store. Trim it to about 2000 characters.';
+  }
+
+  if (Object.keys(errors).length > 0 || attending === null) {
+    return c.html(<FormPage cfg={cfg} row={row} values={v} errors={errors} phase={phase} />, 422);
+  }
+
+  const submission: FormSubmission = {
+    name,
+    email,
+    attending,
+    department: department || null,
+    problem_statement: problemStatement || null,
+    category,
+    skills,
+    has_personal_laptop: laptop,
+    hopes: hopes || null,
+  };
+  await saveSubmission(c.env.DB, row, submission);
+
+  // POST-redirect-GET: a refresh on the confirmation must not resubmit.
+  return c.redirect(`/r/${row.token}?saved=1`, 303);
+});
