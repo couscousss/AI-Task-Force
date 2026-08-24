@@ -305,6 +305,62 @@ legend { padding: 0; }
 .scale-text strong { font-weight: 620; }
 .scale-text span { color: var(--ink-2); font-size: 0.86rem; }
 
+/* The scale stated once, in full, above the four axes. */
+.scale-legend {
+  border: 1px solid var(--accent-line); background: var(--accent-soft);
+  border-radius: var(--radius); padding: 0.9rem 1rem; margin-bottom: 1rem;
+}
+.scale-legend-title {
+  font-family: var(--font); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent);
+  margin: 0 0 0.55rem;
+}
+.scale-legend-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.scale-legend-list li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.6rem; font-size: 0.92rem; }
+.scale-legend-list .scale-num { background: var(--surface); border-color: var(--accent-line); color: var(--accent); }
+
+/* One compact row of five per axis. Each cell keeps its name, so a level is
+   identifiable without scrolling back to the legend. */
+.scale-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.35rem; }
+.scale-cell {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 0.3rem; text-align: center; cursor: pointer;
+  min-height: 4.1rem; padding: 0.5rem 0.3rem;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); font-size: 0.74rem; line-height: 1.25;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.scale-cell input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.scale-cell:hover { border-color: var(--accent-line); background: var(--sunk); }
+.scale-cell:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Below ~26rem, five names cannot fit on one line each and "Comfortable" breaks
+   mid-word. The legend directly above carries the wording, so narrow screens show the
+   numbers alone -- the standard Likert pattern. The name stays in the accessibility
+   tree either way, so the radio is never announced as a bare digit. */
+.scale-cell-name {
+  color: var(--ink-2); font-size: 0.75rem; line-height: 1.2; max-width: 100%;
+}
+@media (max-width: 25.999rem) {
+  .scale-cell-name {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .scale-cell { min-height: 3rem; justify-content: center; }
+  .scale-cell .scale-num { min-width: 1.7rem; height: 1.7rem; font-size: 0.92rem; }
+}
+/* Selected state is carried by weight and a 2px border as well as colour. */
+.scale-cell:has(input:checked) {
+  border-color: var(--accent); border-width: 2px; padding: calc(0.5rem - 1px) calc(0.3rem - 1px);
+  background: var(--accent-soft);
+}
+.scale-cell:has(input:checked) .scale-num { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.scale-cell:has(input:checked) .scale-cell-name { color: var(--accent); font-weight: 700; }
+.scale-cell:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
+@media (max-width: 23rem) {
+  .scale-row { gap: 0.22rem; }
+  .scale-cell { padding: 0.45rem 0.15rem; }
+}
+
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
   font: inherit; font-size: 1rem; font-weight: 620; cursor: pointer;

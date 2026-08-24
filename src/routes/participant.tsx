@@ -476,6 +476,23 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked }: FormPageProps
               </p>
             </Callout>
 
+            {/* The 1-5 scale, stated once, in full, and always on the page. Each option
+                below still carries its name, so a level is identifiable without scrolling
+                back up here. */}
+            <div class="scale-legend">
+              <h3 class="scale-legend-title">What the numbers mean</h3>
+              <ol class="scale-legend-list">
+                {SKILL_SCALE.map((s) => (
+                  <li>
+                    <span class="scale-num">{s.value}</span>
+                    <span>
+                      <strong>{s.name}</strong> <span class="muted">{s.description}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
             {SKILL_AXES.map((axis) => {
               const key = `skill_${axis}`;
               const meta = SKILL_AXIS_LABELS[axis];
@@ -493,9 +510,9 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked }: FormPageProps
                     <strong>{meta.label}</strong>
                     <span>{meta.description}</span>
                   </div>
-                  <div class="scale-options">
+                  <div class="scale-row">
                     {SKILL_SCALE.map((s) => (
-                      <label class="scale-option">
+                      <label class="scale-cell" title={`${s.value} — ${s.name}: ${s.description}`}>
                         <input
                           type="radio"
                           name={key}
@@ -504,9 +521,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked }: FormPageProps
                           disabled={readOnly}
                         />
                         <span class="scale-num">{s.value}</span>
-                        <span class="scale-text">
-                          <strong>{s.name}</strong> <span>{s.description}</span>
-                        </span>
+                        <span class="scale-cell-name">{s.name}</span>
                       </label>
                     ))}
                   </div>
