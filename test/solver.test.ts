@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SOLVER_PARAMS } from '../src/config';
 import type { SolverParams } from '../src/config';
 import { computeTeamCount, computeTeamSizes, solve } from '../src/grouping';
+import { buildBuckets, jaccard, tokenize } from '../src/grouping/themes';
 import type { SolverInput, SolverParticipant, Theme } from '../src/grouping/types';
 import {
   assertEveryoneAssignedOnce,
@@ -45,7 +46,7 @@ describe('computeTeamCount', () => {
 
 describe('computeTeamSizes', () => {
   it('sums to n and spreads the remainder one per team', () => {
-    expect(computeTeamSizes(43, 11)).toEqual([4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3]);
+    expect(computeTeamSizes(43, 11)).toEqual([4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3]);
     expect(computeTeamSizes(43, 11).reduce((a, b) => a + b, 0)).toBe(43);
     expect(computeTeamSizes(12, 3)).toEqual([4, 4, 4]);
     expect(computeTeamSizes(0, 3)).toEqual([0, 0, 0]);
@@ -331,5 +332,74 @@ describe('solve — invariants across many seeds', () => {
       expect(result.teams.map((t) => t.index)).toEqual(result.teams.map((_, k) => k));
       expect(Number.isFinite(result.score.weighted_total), label).toBe(true);
     }
+  });
+});
+
+describe('theme buckets', () => {
+  it('tokenizes past stopwords and scores overlap with Jaccard', () => {
+    expect([...tokenize('The monthly Reporting pack, for our team!')].sort()).toEqual([
+      'monthly',
+      'pack',
+      'reporting',
+    ]);
+    expect(jaccard(tokenize('invoice processing'), tokenize('invoice processing'))).toBe(1);
+    expect(jaccard(tokenize('invoice processing'), tokenize('rota scheduling'))).toBe(0);
+    expect(jaccard(tokenize(''), tokenize('anything'))).toBe(0);
+  });
+
+  it('merges a too-small theme into the one it shares wording with, not the biggest one', () => {
+    const participants = makeParticipants({ count: 24, seed: 2, spread: 'wide' });
+    const ids = participants.map((p) => p.id);
+    const themes: Theme[] = [
+      {
+        label: 'Rota scheduling',
+        summary: 'Building weekly rotas around leave and site coverage',
+        participant_ids: ids.slice(0, 14),
+      },
+      {
+        label: 'Invoice processing',
+        summary: 'Supplier invoices keyed by hand into finance systems',
+        participant_ids: ids.slice(14, 22),
+      },
+      {
+        // Two members, below min_team_size, so it has to be merged somewhere.
+        label: 'Invoice queries',
+        summary: 'Chasing supplier invoices that finance has queried',
+        participant_ids: ids.slice(22, 24),
+      },
+    ];
+    const buckets = buildBuckets(participants, themes, computeTeamCount(24, P), P);
+    expect(buckets.map((b) => b.label)).toEqual(['Rota scheduling', 'Invoice processing']);
+    const invoices = buckets.find((b) => b.label === 'Invoice processing')!;
+    expect(invoices.member_ids).toHaveLength(10);
+    expect(invoices.member_ids).toContain(ids[22]);
+  });
+
+  it('never leaves more themes than teams, and hands every bucket at least one team', () => {
+    const participants = makeParticipants({ count: 12, seed: 3, spread: 'wide' });
+    const themes: Theme[] = participants.map((p, i) => ({
+      label: `Theme ${i}`,
+      summary: `Distinct wording number ${i}`,
+      participant_ids: [p.id],
+    }));
+    const teamCount = computeTeamCount(12, P);
+    const buckets = buildBuckets(participants, themes, teamCount, P);
+    expect(buckets.length).toBeLessThanOrEqual(teamCount);
+    expect(buckets.every((b) => b.slots >= 1)).toBe(true);
+    expect(buckets.reduce((a, b) => a + b.slots, 0)).toBe(teamCount);
+    expect(buckets.flatMap((b) => b.member_ids).sort()).toEqual(participants.map((p) => p.id).sort());
+  });
+
+  it('splits a theme bigger than max_team_size across several teams', () => {
+    const participants = makeParticipants({ count: 30, seed: 4, spread: 'wide' });
+    const ids = participants.map((p) => p.id);
+    const themes: Theme[] = [
+      { label: 'Big', summary: 'Most of the room', participant_ids: ids.slice(0, 22) },
+      { label: 'Small', summary: 'A separate concern entirely', participant_ids: ids.slice(22) },
+    ];
+    const buckets = buildBuckets(participants, themes, computeTeamCount(30, P), P);
+    const big = buckets.find((b) => b.label === 'Big')!;
+    expect(big.slots).toBeGreaterThanOrEqual(Math.ceil(22 / P.max_team_size));
+    expect(big.team_indexes).toHaveLength(big.slots);
   });
 });

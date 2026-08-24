@@ -134,7 +134,11 @@ export function solve(input: SolverInput): SolverResult {
   for (const b of buckets) {
     const sizes = computeTeamSizes(b.member_ids.length, b.team_indexes.length);
     b.team_indexes.forEach((t, i) => {
-      if (t >= 0 && t < teamCount) capacity[t] = Math.max(1, sizes[i] ?? params.target_team_size);
+      // Capped at max_team_size: a theme with one slot and eight people must overflow
+      // into the leftover pool rather than quietly build a team of eight.
+      if (t >= 0 && t < teamCount) {
+        capacity[t] = Math.max(1, Math.min(params.max_team_size, sizes[i] ?? params.target_team_size));
+      }
     });
   }
 
@@ -230,13 +234,26 @@ export function solve(input: SolverInput): SolverResult {
   // ---- 5. repair pass ------------------------------------------------------
   let repair_swaps = 0;
   const stuck = new Set<number>();
-  const repairBudget = teamCount * 6 + 40;
+  const repairBudget = teamCount * 12 + 60;
   for (let pass = 0; pass < repairBudget; pass++) {
+    // Size comes first. It is structural — every other repair is a swap that leaves
+    // sizes alone — and an oversized team at the end of the list would otherwise never
+    // get looked at on a pool with many laptop shortfalls.
     let target = -1;
     for (let t = 0; t < teamCount; t++) {
-      if ((costs[t] ?? 0) > 0 && !stuck.has(t)) {
+      const c = checks[t];
+      if (!c || stuck.has(t)) continue;
+      if (c.undersized || c.oversized) {
         target = t;
         break;
+      }
+    }
+    if (target === -1) {
+      for (let t = 0; t < teamCount; t++) {
+        if ((costs[t] ?? 0) > 0 && !stuck.has(t)) {
+          target = t;
+          break;
+        }
       }
     }
     if (target === -1) break;
@@ -277,9 +294,11 @@ export function solve(input: SolverInput): SolverResult {
     const costA = costWith(a, aMembers);
     const costB = costWith(b, bMembers);
     const before = (costs[a] ?? 0) + (costs[b] ?? 0);
-    // The team we are repairing must strictly improve, and no one else may pay for it.
+    // The team we are repairing must strictly improve AND the total must strictly fall.
+    // "Must not increase" is not enough: two teams that each hold exactly the minimum
+    // number of laptops would hand one back and forth for ever.
     if (costA >= (costs[a] ?? 0)) return best;
-    if (costA + costB > before) return best;
+    if (costA + costB >= before) return best;
     const total = scoreWith(a, aMembers, b, bMembers).weighted_total;
     if (best === null) return { a, b, aMembers, bMembers, total, key };
     if (total > best.total + EPS) return { a, b, aMembers, bMembers, total, key };
