@@ -9,7 +9,13 @@ import { loadConfig } from '../../config';
 import { listAll } from '../../db/participants';
 import { countsByParticipant, recent, sentOnLocalDay } from '../../db/email-log';
 import { getPublishedRun, getTeams } from '../../db/runs';
-import { MAX_PER_BATCH, deliverBatch, selectReminderRecipients, type EmailJob } from '../../email/cron';
+import {
+  MAX_PER_BATCH,
+  deliverBatch,
+  localDayKey,
+  selectReminderRecipients,
+  type EmailJob,
+} from '../../email/cron';
 import { inviteEmail, reminderEmail, teamAnnouncementEmail } from '../../email/templates';
 import { formatLocalDateTime, isPast } from '../../lib/dates';
 import { isValidEmail, squish } from '../../lib/validation';
@@ -600,7 +606,7 @@ emailAdminRoutes.post('/send-invite', async (c) => {
       kind: 'invite',
       message: inviteEmail({ name: row.name, email: row.email, token: row.token }, cfg),
     }));
-    background(c, deliverBatch(c.env, jobs));
+    background(c, deliverBatch(c.env, jobs, localDayKey(cfg, new Date())));
 
     const parts = [`Sending ${plural(batch.length, 'invite', 'invites')} now.`];
     if (sel.alreadyInvited > 0) parts.push(`Skipped ${sel.alreadyInvited} who already had one.`);
@@ -648,7 +654,7 @@ emailAdminRoutes.post('/send-invite', async (c) => {
       kind: 'invite',
       message: inviteEmail({ name: row.name, email: row.email, token: row.token }, cfg),
     },
-  ]);
+  ], localDayKey(cfg, new Date()));
 
   if (outcome.sent === 1) {
     if (next) return c.redirect(withParam(next, 'sent', '1'), 303);
@@ -709,6 +715,7 @@ emailAdminRoutes.post('/send-reminders', async (c) => {
         kind: 'reminder' as const,
         message: reminderEmail({ name: row.name, email: row.email, token: row.token }, cfg),
       })),
+      localDayKey(cfg, new Date()),
     ),
   );
 
@@ -768,6 +775,7 @@ emailAdminRoutes.post('/send-announcement', async (c) => {
           cfg,
         ),
       })),
+      localDayKey(cfg, new Date()),
     ),
   );
 

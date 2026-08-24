@@ -75,6 +75,12 @@ export interface SolverStats {
 
 export interface SolverResult {
   teams: SolvedTeam[];
+  /**
+   * participant id -> the theme key the solver actually scored against. This is the
+   * POST-merge bucket, not the raw clustering label, so anything that re-scores an
+   * arrangement later (the review board) gets the same number for untouched teams.
+   */
+  theme_of: Record<string, string>;
   score: ScoreBreakdown;
   violations: Violation[];
   stats: SolverStats;

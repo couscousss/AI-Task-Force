@@ -220,3 +220,64 @@ the accessibility tree, so a screen reader never announces a bare digit.
 
 The section went from roughly 700px per axis to roughly 200px; all four axes and the
 laptop question now fit within about a screen and a half instead of four screens.
+
+---
+
+# Defects found by review, and how they were fixed
+
+An adversarial review pass over the finished code produced 20 candidate findings; 9 were
+refuted on inspection and 11 confirmed, which deduplicate to six real defects. All six are
+fixed. The three serious ones are worth recording, because each was invisible from the
+outside and each would have surfaced on the day.
+
+## A team could be published under a theme none of its members wrote about
+
+`teamBucket[t]` was fixed when team slots were allocated and never updated afterwards, but
+the emitted `theme_label` read from it. Local search legitimately exchanges whole groups
+between teams to raise cohesion, so after it ran the label followed the *slot* rather than
+the *people*. That label is written to `teams.theme_label`, passed to the naming call as
+the team's theme, and shown on the review board, the projected page and the announcement
+email.
+
+Across a 2668-team sweep, 65 teams carried a label with zero members from that theme.
+Teams are now labelled by the theme their final members actually came from, with a
+deterministic tie-break; the same sweep now reports zero.
+
+## Reminders could be sent twice
+
+Eligibility was read from `email_log` once, before a batch started, and `reserve()` was an
+unconditional INSERT with no unique index. Any second trigger starting while a batch was
+still draining — the hourly cron firing during an organizer's "Send reminders" click, or a
+retried cron — re-selected and re-sent to everyone not yet reserved. §8 says that must be
+impossible.
+
+The rule now lives in the schema (`migrations/0002_email_day_key.sql`): a unique index on
+`(participant_id, kind, day_key)`, where `day_key` is the **local** calendar day. A second
+reserve fails and that person is skipped. A failed send sets `day_key` to NULL, releasing
+the slot — SQLite treats NULLs as distinct in a unique index — so a genuine failure can
+still be retried, while a race cannot double-send.
+
+## Walk-ins were invisible to the grouping engine
+
+`POST /admin/participants/new` never set `submitted_at`, and both the review board and the
+solver draw their pool from `listAttendingSubmitted` (`attending = 1 AND submitted_at IS
+NOT NULL`). A walk-in added with every field filled in was therefore in no run, and did not
+even appear in the Unassigned column — so the README's own walk-in procedure, "drag them
+onto a team", could not be carried out. A walk-in marked as attending now gets
+`submitted_at` at the moment they are added, because a person standing in the room is a
+response.
+
+## The three smaller ones
+
+- **Score disagreement.** The review board rebuilt its theme lookup from the raw clustering
+  labels while the solver had scored against post-merge buckets, so an untouched
+  arrangement showed a different number on the run page and the board — which claims to use
+  "the same logic the solver used". The solver now emits the keys it actually scored
+  against, the pipeline stores them, and the board uses them. Verified: stored and
+  recomputed scores now agree exactly.
+- **Nameless members vanished from the projected page.** A member with no name on record was
+  dropped from both the `/teams` roster and its headcount. They now appear as "Name not
+  recorded" and are counted — deliberately not their email, since `/teams` is the one route
+  not behind Cloudflare Access.
+- **An emptied team name rendered as a blank heading**, because `?? 'Team N'` does not fire
+  for an empty string.

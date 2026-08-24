@@ -43,16 +43,15 @@ publicTeamRoutes.get('/teams', async (c) => {
 
   // Names only. Anyone whose record has gone missing is simply left out rather than
   // leaking an id or an email onto a public page.
+  // A member with no name on record still has to appear on the wall and still has to be
+  // counted — dropping them silently means a real person standing in the room is on no
+  // team on the screen. The placeholder is deliberately not their email: this page is
+  // the one route that is not behind Cloudflare Access.
+  const UNNAMED = 'Name not recorded';
   const nameOf = new Map<string, string>();
-  for (const row of rows) {
-    const name = squish(row.name);
-    if (name) nameOf.set(row.id, name);
-  }
+  for (const row of rows) nameOf.set(row.id, squish(row.name) || UNNAMED);
 
-  const totalPeople = teams.reduce(
-    (acc, t) => acc + t.member_ids.filter((id) => nameOf.has(id)).length,
-    0,
-  );
+  const totalPeople = teams.reduce((acc, t) => acc + t.member_ids.length, 0);
 
   return c.html(
     <Layout title={`Teams — ${cfg.eventName}`} bodyClass="project-view">
@@ -77,12 +76,11 @@ publicTeamRoutes.get('/teams', async (c) => {
             <div class="project-grid">
               {teams.map((t) => {
                 const members = t.member_ids
-                  .map((id) => nameOf.get(id))
-                  .filter((n): n is string => n !== undefined)
+                  .map((id) => nameOf.get(id) ?? UNNAMED)
                   .sort((a, b) => a.localeCompare(b));
                 return (
                   <section class="project-team">
-                    <h2>{t.team.name ?? `Team ${t.team.sort_order + 1}`}</h2>
+                    <h2>{squish(t.team.name) || `Team ${t.team.sort_order + 1}`}</h2>
                     {t.team.theme_label ? <p class="small">{t.team.theme_label}</p> : null}
                     {t.team.project_brief ? <p>{t.team.project_brief}</p> : null}
                     <ol>

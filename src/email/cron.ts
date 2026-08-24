@@ -28,6 +28,11 @@ const PAUSE_BETWEEN_SENDS_MS = 250;
  */
 export const MAX_PER_BATCH = 100;
 
+/** The local calendar day a send belongs to — the day the once-per-day rule is written in. */
+export function localDayKey(cfg: EventConfig, now: Date): string {
+  return toLocalParts(now, cfg.localUtcOffsetHours).dateKey;
+}
+
 /** Stop after this many failures in a row rather than burning the whole batch on a dead provider. */
 const CONSECUTIVE_FAILURE_LIMIT = 5;
 
@@ -39,6 +44,8 @@ export interface EmailJob {
 }
 
 export interface BatchOutcome {
+  /** Reserved by a concurrent send between the eligibility read and the insert. */
+  skipped: number;
   sent: number;
   failed: number;
   /** Set when the loop gave up early; the remaining jobs were never attempted. */
@@ -50,8 +57,12 @@ export interface BatchOutcome {
  * Reserve, send, mark. Sequential on purpose — 150 people at a quarter-second apart is
  * well inside a sweep, and a provider rate limit is a far worse failure than slowness.
  */
-export async function deliverBatch(env: Env, jobs: EmailJob[]): Promise<BatchOutcome> {
-  const outcome: BatchOutcome = { sent: 0, failed: 0, abandoned: 0, firstError: null };
+export async function deliverBatch(
+  env: Env,
+  jobs: EmailJob[],
+  dayKey: string,
+): Promise<BatchOutcome> {
+  const outcome: BatchOutcome = { sent: 0, failed: 0, abandoned: 0, skipped: 0, firstError: null };
   if (jobs.length === 0) return outcome;
 
   if (!env.RESEND_API_KEY?.trim()) {
@@ -67,7 +78,14 @@ export async function deliverBatch(env: Env, jobs: EmailJob[]): Promise<BatchOut
   let consecutiveFailures = 0;
   for (let i = 0; i < jobs.length; i++) {
     const job = jobs[i]!;
-    const logId = await reserve(env.DB, job.participantId, job.kind);
+    const logId = await reserve(env.DB, job.participantId, job.kind, dayKey);
+    if (logId === null) {
+      // Someone else reserved this person for this kind today between our eligibility
+      // read and now — a concurrent cron, or a second click. Skipping is the whole point.
+      outcome.skipped++;
+      console.warn(`[email] ${job.kind} to ${job.to} skipped: already reserved today`);
+      continue;
+    }
     const result = await sendEmail(env, {
       to: job.to,
       subject: job.message.subject,
@@ -148,6 +166,7 @@ export async function sendReminders(env: Env, cfg: EventConfig, now: Date): Prom
       kind: 'reminder' as const,
       message: reminderEmail({ name: row.name, email: row.email, token: row.token }, cfg),
     })),
+    localDayKey(cfg, now),
   );
   return { ...outcome, eligible: eligible.length };
 }

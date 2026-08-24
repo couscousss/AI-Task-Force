@@ -698,10 +698,16 @@ participantAdminRoutes.post('/new', async (c) => {
   }
 
   const { row } = await ensureInvite(c.env.DB, { name: squish(v.name) || null, email });
+  const attending = v.attending === '' ? null : Number(v.attending);
+  // A walk-in is a person standing in the room, so they count as a response the moment
+  // they are added. Without submitted_at they are excluded from listAttendingSubmitted,
+  // which is the only source for both the review board and the solver — they would be
+  // ungroupable and undraggable, and the runbook's "drag them onto a team" would fail.
   await adminUpdate(c.env.DB, row.id, {
     name: squish(v.name) || null,
+    submitted_at: attending === ATTENDING.yes ? (row.submitted_at ?? nowIso()) : row.submitted_at,
     department: squish(v.department) || null,
-    attending: v.attending === '' ? null : Number(v.attending),
+    attending,
     problem_statement: squish(v.problem_statement) || null,
     skill_understanding: levelOrNull(v.skills.understanding),
     skill_tools: levelOrNull(v.skills.tools),

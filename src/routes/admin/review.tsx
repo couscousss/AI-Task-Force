@@ -86,9 +86,17 @@ async function loadBoard(db: D1Database, run: GroupingRunRow): Promise<BoardCont
   const missing = [...assigned].filter((id) => !people.has(id));
   for (const row of await listByIds(db, missing)) people.set(row.id, personOf(row));
 
+  // Key theme cohesion exactly as the solver did, off the POST-merge buckets it stored.
+  // Falling back to raw clustering labels here would score an untouched arrangement
+  // differently from the run page whenever a small theme was merged away.
+  const parsedThemes = parseThemes(run);
   const themeOf = new Map<string, string>();
-  for (const theme of parseThemes(run).themes) {
-    for (const id of theme.participant_ids) themeOf.set(id, theme.label);
+  if (Object.keys(parsedThemes.themeOf).length > 0) {
+    for (const [id, key] of Object.entries(parsedThemes.themeOf)) themeOf.set(id, key);
+  } else {
+    for (const theme of parsedThemes.themes) {
+      for (const id of theme.participant_ids) themeOf.set(id, theme.label);
+    }
   }
 
   const unassigned = [...people.keys()].filter((id) => !assigned.has(id));

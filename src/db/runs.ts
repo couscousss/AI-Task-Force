@@ -88,6 +88,7 @@ export async function saveRunResult(
   score: ScoreBreakdown,
   violations: Violation[],
   warnings: string[],
+  themeOf: Record<string, string> = {},
 ): Promise<void> {
   const statements: D1PreparedStatement[] = [];
   for (const t of teams) {
@@ -125,7 +126,7 @@ export async function saveRunResult(
       )
       .bind(
         `Done — ${teams.length} teams`,
-        JSON.stringify({ themes, warnings }),
+        JSON.stringify({ themes, warnings, theme_of: themeOf }),
         JSON.stringify(score),
         JSON.stringify(violations),
         nowIso(),
@@ -266,12 +267,25 @@ export function parseScore(row: GroupingRunRow): ScoreBreakdown | null {
   }
 }
 
-export function parseThemes(row: GroupingRunRow): { themes: Theme[]; warnings: string[] } {
-  if (!row.themes_json) return { themes: [], warnings: [] };
+export function parseThemes(row: GroupingRunRow): {
+  themes: Theme[];
+  warnings: string[];
+  /** participant id -> the theme key the solver scored against (post-merge bucket). */
+  themeOf: Record<string, string>;
+} {
+  if (!row.themes_json) return { themes: [], warnings: [], themeOf: {} };
   try {
-    const parsed = JSON.parse(row.themes_json) as { themes?: Theme[]; warnings?: string[] };
-    return { themes: parsed.themes ?? [], warnings: parsed.warnings ?? [] };
+    const parsed = JSON.parse(row.themes_json) as {
+      themes?: Theme[];
+      warnings?: string[];
+      theme_of?: Record<string, string>;
+    };
+    return {
+      themes: parsed.themes ?? [],
+      warnings: parsed.warnings ?? [],
+      themeOf: parsed.theme_of ?? {},
+    };
   } catch {
-    return { themes: [], warnings: [] };
+    return { themes: [], warnings: [], themeOf: {} };
   }
 }

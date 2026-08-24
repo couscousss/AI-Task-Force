@@ -104,6 +104,7 @@ export async function executeRun(env: Env, runId: string): Promise<void> {
       result.score,
       result.violations,
       warnings,
+      result.theme_of,
     );
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

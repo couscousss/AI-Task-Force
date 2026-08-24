@@ -104,7 +104,7 @@ export function solve(input: SolverInput): SolverResult {
   const teamCount = computeTeamCount(n, params);
 
   if (n === 0 || teamCount === 0) {
-    return { teams: [], score: zeroScore(), violations: [], stats: emptyStats(n, 0, startedAt) };
+    return { teams: [], theme_of: {}, score: zeroScore(), violations: [], stats: emptyStats(n, 0, startedAt) };
   }
 
   const byIdMap = new Map<string, SolverParticipant>();
@@ -418,8 +418,27 @@ export function solve(input: SolverInput): SolverResult {
   const facts = poolFacts(participants, teamCount, params);
   const violations = buildViolations(finalChecks, facts, params, { unassigned: 0, duplicated: 0 });
 
+  // Label a team by the theme its FINAL members came from, not by the bucket its slot
+  // was allocated from. Local search legitimately exchanges whole groups between teams to
+  // raise cohesion, and a label that follows the slot would then name a theme nobody on
+  // the team wrote about — which is what gets published, emailed and read off a wall.
   const teams: SolvedTeam[] = memberIds.map((ids, t) => {
-    const bucket = buckets[teamBucket[t] ?? 0];
+    const tally = new Map<number, number>();
+    for (const id of ids) {
+      const bi = bucketOf.get(id);
+      if (bi !== undefined) tally.set(bi, (tally.get(bi) ?? 0) + 1);
+    }
+    let dominant = teamBucket[t] ?? 0;
+    let best = -1;
+    // Deterministic: highest count wins, ties go to the lowest bucket index.
+    for (const bi of [...tally.keys()].sort((a, b) => a - b)) {
+      const c = tally.get(bi)!;
+      if (c > best) {
+        best = c;
+        dominant = bi;
+      }
+    }
+    const bucket = buckets[dominant];
     return {
       index: t,
       theme_label: bucket?.label ?? 'Mixed',
@@ -430,6 +449,7 @@ export function solve(input: SolverInput): SolverResult {
 
   return {
     teams,
+    theme_of: Object.fromEntries(themeKeys),
     score: aggregateScore(stats, params.weights),
     violations,
     stats: {
