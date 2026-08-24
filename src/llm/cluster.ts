@@ -169,7 +169,10 @@ export function clusterByCategory(candidates: ClusterCandidate[]): Theme[] {
     })
     .map(([key, ids]) => ({
       label: categoryLabel(key === '' ? null : key),
-      summary: `Everyone who said they want to work on: ${categoryLabel(key === '' ? null : key).toLowerCase()}.`,
+      summary:
+        key === ''
+          ? 'People who did not pick what they wanted to explore.'
+          : `People who chose "${categoryLabel(key)}" as what they want to explore.`,
       participant_ids: [...ids].sort(),
     }));
 }
