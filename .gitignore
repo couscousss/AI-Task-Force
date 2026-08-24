@@ -5,3 +5,4 @@ dist/
 scripts/.seed.sql
 *.log
 .DS_Store
+/.preview/

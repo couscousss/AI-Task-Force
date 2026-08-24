@@ -164,7 +164,10 @@ export function aggregateScore(stats: readonly TeamStat[], weights: SoftScoreWei
     for (const m of means) sq += (m - mu) * (m - mu);
     perAxisVariance.push(sq / means.length);
   }
-  const across_team_balance = -(mean(perAxisVariance) / MAX_AXIS_MEAN_VARIANCE);
+  const meanVariance = mean(perAxisVariance);
+  // `|| 0` collapses the negative zero a perfectly balanced set of teams would otherwise
+  // produce, so two identical arrangements always stringify identically.
+  const across_team_balance = -(meanVariance / MAX_AXIS_MEAN_VARIANCE) || 0;
 
   const weighted_total =
     weights.theme_cohesion * theme_cohesion +

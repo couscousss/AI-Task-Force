@@ -159,6 +159,11 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
 }
 
+/** "1 laptop" / "9 laptops" — every number in a violation message goes through this. */
+function count(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
 /**
  * The violation register. One entry per constraint: `pool` when the participant pool
  * makes it impossible (the organizer needs to recruit, merge or lower a threshold) and
@@ -181,7 +186,7 @@ export function buildViolations(
       scope: 'pool',
       team_indexes: [],
       message:
-        `H1: ${facts.people} ${plural(facts.people, 'person is', 'people are')} attending, fewer than the ` +
+        `H1: ${count(facts.people, 'person is', 'people are')} attending, fewer than the ` +
         `minimum team size of ${params.min_team_size}. Run this as one group, or lower the minimum team size.`,
     });
   }
@@ -194,7 +199,7 @@ export function buildViolations(
       scope: 'team',
       team_indexes: empty,
       message:
-        `H1: ${empty.length} ${plural(empty.length, 'team has', 'teams have')} no members (${listTeams(empty)}). ` +
+        `H1: ${count(empty.length, 'team has', 'teams have')} no members (${listTeams(empty)}). ` +
         `Move people across, or delete the empty ${plural(empty.length, 'team', 'teams')} and re-run.`,
     });
   }
@@ -207,9 +212,9 @@ export function buildViolations(
       scope: 'team',
       team_indexes: under,
       message:
-        `H1: ${under.length} ${plural(under.length, 'team has', 'teams have')} fewer than ` +
-        `${params.min_team_size} members (${listTeams(under)}). Move ${shortfall} ` +
-        `${plural(shortfall, 'person', 'people')} across, or lower the team count and re-run.`,
+        `H1: ${count(under.length, 'team has', 'teams have')} fewer than ${params.min_team_size} members ` +
+        `(${listTeams(under)}). Move ${count(shortfall, 'person', 'people')} across, or lower the team count ` +
+        `and re-run.`,
     });
   }
   if (over.length > 0) {
@@ -221,9 +226,8 @@ export function buildViolations(
       scope: 'team',
       team_indexes: over,
       message:
-        `H1: ${over.length} ${plural(over.length, 'team has', 'teams have')} more than ` +
-        `${params.max_team_size} members (${listTeams(over)}). Move ${excess} ` +
-        `${plural(excess, 'person', 'people')} to a smaller team.`,
+        `H1: ${count(over.length, 'team has', 'teams have')} more than ${params.max_team_size} members ` +
+        `(${listTeams(over)}). Move ${count(excess, 'person', 'people')} to a smaller team.`,
     });
   }
   if (extra.unassigned > 0) {
@@ -232,7 +236,7 @@ export function buildViolations(
       scope: 'team',
       team_indexes: [],
       message:
-        `H1: ${extra.unassigned} ${plural(extra.unassigned, 'person is', 'people are')} not on any team. ` +
+        `H1: ${count(extra.unassigned, 'person is', 'people are')} not on any team. ` +
         `Drag ${plural(extra.unassigned, 'them', 'each of them')} onto a team before publishing.`,
     });
   }
@@ -242,8 +246,8 @@ export function buildViolations(
       scope: 'team',
       team_indexes: [],
       message:
-        `H1: ${extra.duplicated} ${plural(extra.duplicated, 'person appears', 'people appear')} on more than ` +
-        `one team. Remove the duplicate ${plural(extra.duplicated, 'entry', 'entries')} before publishing.`,
+        `H1: ${count(extra.duplicated, 'person appears', 'people appear')} on more than one team. ` +
+        `Remove the duplicate ${plural(extra.duplicated, 'entry', 'entries')} before publishing.`,
     });
   }
 
@@ -256,10 +260,15 @@ export function buildViolations(
       scope: 'pool',
       team_indexes: [],
       message:
-        `H2: ${shortLaptops.length} ${plural(shortLaptops.length, 'team has', 'teams have')} fewer than ` +
-        `${params.min_laptops_per_team} laptops. Only ${facts.laptops} laptops across ${facts.team_count} teams, ` +
-        `where ${facts.laptops_needed} are needed. Ask ${missing} more ${plural(missing, 'person', 'people')} to ` +
-        `bring one, or lower the laptop minimum to ${Math.max(1, params.min_laptops_per_team - 1)}.`,
+        `H2: ${count(shortLaptops.length, 'team has', 'teams have')} fewer than ` +
+        `${count(params.min_laptops_per_team, 'laptop', 'laptops')}. ` +
+        (facts.laptops === 0
+          ? `No one has said they can bring a laptop, and ${facts.laptops_needed} are needed across ` +
+            `${count(facts.team_count, 'team', 'teams')}. `
+          : `Only ${count(facts.laptops, 'laptop', 'laptops')} across ` +
+            `${count(facts.team_count, 'team', 'teams')}, where ${facts.laptops_needed} are needed. `) +
+        `Ask ${missing} more ${plural(missing, 'person', 'people')} to bring one, or lower the laptop ` +
+        `minimum to ${Math.max(1, params.min_laptops_per_team - 1)}.`,
     });
   } else if (shortLaptops.length > 0) {
     violations.push({
@@ -267,9 +276,10 @@ export function buildViolations(
       scope: 'team',
       team_indexes: shortLaptops,
       message:
-        `H2: ${shortLaptops.length} ${plural(shortLaptops.length, 'team has', 'teams have')} fewer than ` +
-        `${params.min_laptops_per_team} laptops (${listTeams(shortLaptops)}). There are ${facts.laptops} laptops ` +
-        `across ${facts.team_count} teams, enough to go round — move a laptop owner onto ` +
+        `H2: ${count(shortLaptops.length, 'team has', 'teams have')} fewer than ` +
+        `${count(params.min_laptops_per_team, 'laptop', 'laptops')} (${listTeams(shortLaptops)}). There are ` +
+        `${count(facts.laptops, 'laptop', 'laptops')} across ${count(facts.team_count, 'team', 'teams')}, ` +
+        `enough to go round — move a laptop owner onto ` +
         `${plural(shortLaptops.length, 'that team', 'each of those teams')}.`,
     });
   }
@@ -282,9 +292,14 @@ export function buildViolations(
       scope: 'pool',
       team_indexes: [],
       message:
-        `H3: ${noBuilder.length} ${plural(noBuilder.length, 'team has', 'teams have')} no member rating ` +
-        `themselves ${params.builder_threshold}+ on Building. Only ${facts.builders} such participants across ` +
-        `${facts.team_count} teams. Consider pairing these teams or recruiting a facilitator.`,
+        `H3: ${count(noBuilder.length, 'team has', 'teams have')} no member rating themselves ` +
+        `${params.builder_threshold}+ on Building. ` +
+        (facts.builders === 0
+          ? `No one in the pool rates themselves ${params.builder_threshold}+ on Building. ` +
+            `Recruit a facilitator, or sit with the teams yourself on the day.`
+          : `Only ${count(facts.builders, 'such participant', 'such participants')} across ` +
+            `${count(facts.team_count, 'team', 'teams')}. Consider pairing these teams or recruiting a ` +
+            `facilitator.`),
     });
   } else if (noBuilder.length > 0) {
     violations.push({
@@ -292,9 +307,10 @@ export function buildViolations(
       scope: 'team',
       team_indexes: noBuilder,
       message:
-        `H3: ${noBuilder.length} ${plural(noBuilder.length, 'team has', 'teams have')} no member rating ` +
-        `themselves ${params.builder_threshold}+ on Building (${listTeams(noBuilder)}). There are ` +
-        `${facts.builders} such participants across ${facts.team_count} teams — move one across.`,
+        `H3: ${count(noBuilder.length, 'team has', 'teams have')} no member rating themselves ` +
+        `${params.builder_threshold}+ on Building (${listTeams(noBuilder)}). There are ` +
+        `${count(facts.builders, 'such participant', 'such participants')} across ` +
+        `${count(facts.team_count, 'team', 'teams')} — move one across.`,
     });
   }
 
@@ -306,10 +322,14 @@ export function buildViolations(
       scope: 'pool',
       team_indexes: [],
       message:
-        `H4: ${allNovice.length} ${plural(allNovice.length, 'team is', 'teams are')} made up entirely of people ` +
-        `rating ${params.novice_threshold} or below on all four axes. Only ${facts.non_novices} participants rate ` +
-        `above ${params.novice_threshold} on any axis, across ${facts.team_count} teams. Consider merging these ` +
-        `teams or sitting a facilitator with them on the day.`,
+        `H4: ${count(allNovice.length, 'team is', 'teams are')} made up entirely of people rating ` +
+        `${params.novice_threshold} or below on all four axes. ` +
+        (facts.non_novices === 0
+          ? `No participant rates above ${params.novice_threshold} on any axis. Recruit facilitators, or plan ` +
+            `to run a guided session rather than open build time.`
+          : `Only ${count(facts.non_novices, 'participant rates', 'participants rate')} above ` +
+            `${params.novice_threshold} on any axis, across ${count(facts.team_count, 'team', 'teams')}. ` +
+            `Consider merging these teams or sitting a facilitator with them.`),
     });
   } else if (allNovice.length > 0) {
     violations.push({
@@ -317,10 +337,10 @@ export function buildViolations(
       scope: 'team',
       team_indexes: allNovice,
       message:
-        `H4: ${allNovice.length} ${plural(allNovice.length, 'team is', 'teams are')} made up entirely of people ` +
-        `rating ${params.novice_threshold} or below on all four axes (${listTeams(allNovice)}). There are ` +
-        `${facts.non_novices} participants rating above ${params.novice_threshold} across ${facts.team_count} ` +
-        `teams — move one across.`,
+        `H4: ${count(allNovice.length, 'team is', 'teams are')} made up entirely of people rating ` +
+        `${params.novice_threshold} or below on all four axes (${listTeams(allNovice)}). There are ` +
+        `${count(facts.non_novices, 'participant rating', 'participants rating')} above ` +
+        `${params.novice_threshold} across ${count(facts.team_count, 'team', 'teams')} — move one across.`,
     });
   }
 
