@@ -1,0 +1,177 @@
+# Decisions
+
+Every `[DECIDE]` from the build spec, plus the judgement calls that were not in it.
+Recorded so that the next person does not have to re-derive them.
+
+---
+
+## Parameters left as `TODO` in §0
+
+The spec said: if these are still `TODO`, put them in a single `config.ts` with sensible
+defaults so they are changeable in one place. They are all in `src/config.ts`
+(`EVENT_DEFAULTS`), and every one of them is also overridable from `wrangler.jsonc`
+→ `vars` without a code change.
+
+| Parameter | Default chosen | Why |
+|---|---|---|
+| Event date | `2026-09-18` | A placeholder Friday. Set `EVENT_DATE` before invites go out. |
+| Form opens / closes | `2026-09-04` → `2026-09-15 17:00 +08:00` | The spec's "two weeks before", ending the working day before the event. |
+| Expected participants | 80 | Middle of the 40–150 design range; only used for dashboard framing. |
+| Target team size | 4 (min 3, max 5) | Locked by the spec. Configurable per run from the admin UI. |
+| Organizer emails | empty | Cloudflare Access is the real gate; `ORGANIZER_EMAILS` is informational only. |
+| Domain | `http://localhost:8787` | `PUBLIC_ORIGIN` — must be set before any email is sent, or links will point at localhost. |
+
+Timezone is expressed as a fixed UTC offset (`LOCAL_UTC_OFFSET_HOURS`, default +8) rather
+than an IANA zone. The event window is two weeks with no DST transition in the target
+region, and this avoids shipping a timezone database into a Worker.
+
+---
+
+## §5.6 — the "what would you like to explore or build?" list
+
+Kept the spec's starter list verbatim, but stored as stable machine keys
+(`automate`, `search`, `analysis`, `product`, `content`, `unsure`) with the label as
+presentation. Renaming a label later then does not orphan data already collected, and
+the clustering fallback groups on the key rather than on prose that might have changed
+mid-collection.
+
+Confirm the final wording with the organizers; it is one array in `src/config.ts`.
+
+---
+
+## §6.5.2 — merging themes smaller than `min_team_size`
+
+**Chosen: deterministic token overlap (Jaccard), with a "Mixed" bucket as backstop.**
+
+A small theme is merged into the theme with the highest Jaccard similarity over the
+lowercased word tokens of `label + summary`, minus a short stopword list. Ties break on
+larger theme first, then label ascending, so the result cannot depend on map ordering.
+
+Rejected alternatives:
+
+- *Embeddings.* Another network call, another failure mode on the morning of the event,
+  and it would put a model back in the critical path of something that must not depend
+  on one. §3.2's spirit is that the deterministic side stays deterministic.
+- *A second LLM call to merge.* Same objection, plus it makes re-running with the same
+  seed non-reproducible.
+
+Token overlap is crude, but the input is a handful of themes with descriptive labels
+generated moments earlier by the same model, so the labels share vocabulary when the
+themes are genuinely related. Where nothing overlaps at all, the leftovers land in a
+"Mixed" bucket, which is honest rather than confidently wrong.
+
+---
+
+## Additions to the schema in §4
+
+Two, both small, both visible in `migrations/0001_init.sql`:
+
+1. **`participants.attending` also accepts `2` = "not sure yet".** The form in §5 offers
+   three answers but the column comment lists two. Squeezing "not sure" into NULL would
+   destroy the distinction between *has not replied* and *replied, undecided* — and the
+   number organizers chase is the first one. The solver only ever considers `attending = 1`.
+2. **`grouping_runs.progress`.** §6.6 requires the admin page to show real progress
+   ("Clustering 47 problem statements"), not an indefinite spinner. That string has to
+   live somewhere the polling request can read it.
+
+Also added: a partial unique index enforcing that at most one run can have
+`is_published = 1`. §4 states the rule; this makes it unbreakable, including from the
+D1 console.
+
+---
+
+## Live constraint re-validation is a server round-trip
+
+§7 requires that dragging a person between teams re-validates every constraint live.
+The alternative to a round-trip is reimplementing the constraint logic in browser
+JavaScript, which means two implementations of the rules that decide whether the day
+works, drifting apart from the first bugfix.
+
+`POST /admin/review/:runId/validate` calls the same `evaluateArrangement()` the solver
+uses. One source of truth, ~50ms on an office network, debounced at 250ms. The board
+shows a "checking…" state and keeps the last known result if the call fails, rather
+than silently showing green.
+
+---
+
+## Cron fires hourly and decides for itself
+
+§8 asks for reminders on weekdays at 09:00 *local*. Cron triggers are UTC-only, so
+encoding the offset in the cron expression would bury a config value in
+`wrangler.jsonc` and break silently if the event moved timezone.
+
+Instead the trigger is `0 * * * *` and `runReminderSweep()` returns immediately unless
+it is `REMINDER_LOCAL_HOUR` on a weekday in `LOCAL_UTC_OFFSET_HOURS`. A double fire is
+harmless because every send is gated on `email_log` anyway — which §8 requires
+regardless.
+
+---
+
+## Plain Vitest, not `@cloudflare/vitest-pool-workers`
+
+§6 requires the grouping engine to be a pure module with no D1 or network calls inside
+it, and §11 asks for it to be exercised entirely with generated fixtures. Pure TypeScript
+tested in Node needs no Workers runtime, runs in a fraction of the time, and removes a
+whole class of setup failure from the one part of the system where correctness matters
+most. Everything else in the spec is explicitly "light coverage is fine".
+
+---
+
+## Hono JSX rather than template strings
+
+Server-rendered HTML either way — no SPA, no client router, no state library, exactly as
+§2 requires. JSX escapes interpolated text by default, which matters because
+participant-written problem statements are rendered on the admin screens and on the
+projected team view. Template strings would make that a per-call-site decision, and one
+missed escape is a stored-XSS bug on a page an organizer projects onto a wall.
+
+---
+
+## Skill vectors: how aggregate statistics avoid §3.1
+
+§3.1 forbids collapsing the four axes into one number as a solver input. Two of the soft
+score components are nonetheless *statistics over a population*:
+
+- **Within-team skill diversity** computes a standard deviation **per axis** across a
+  team's members, then averages those four numbers.
+- **Across-team balance** computes each team's mean **per axis**, then the variance of
+  that per-axis mean across teams, then averages the four variances.
+
+In both cases the aggregation happens over per-axis statistics, never over a per-person
+scalar. No participant is ever reduced to a single number on the way in. The admin UI
+does show a derived total as a rough sort key, which §3.1 explicitly permits — it is not
+passed to the solver.
+
+---
+
+## Anthropic model
+
+`claude-sonnet-5`, set in `src/config.ts` and overridable via the `ANTHROPIC_MODEL` var,
+per §6.2's "default to a current Sonnet-class model". Called via the official
+`@anthropic-ai/sdk` with `baseURL` pointed at AI Gateway when `AI_GATEWAY_URL` is set.
+
+Structured outputs (`output_config.format` with a Zod schema) do the shape validation, so
+the retry loop in §6.2 only has to handle the *semantic* rules — ids appearing exactly
+once, no invented ids, theme count within bounds — rather than malformed JSON.
+
+Note for whoever revisits this: on this model generation `temperature`, `top_p`, `top_k`
+and `thinking.budget_tokens` are rejected with a 400, and assistant prefill is not
+available. The call sites are written accordingly.
+
+---
+
+## Turnstile and Resend degrade rather than block
+
+If `TURNSTILE_SECRET_KEY` is unset the check is skipped; if `RESEND_API_KEY` is unset
+`sendEmail()` returns a clear failure instead of throwing. Neither is a security position
+— it is that an expired key must not be able to take the participant form down on the
+morning of the event. Both are logged.
+
+---
+
+## Spreadsheet-injection guard on CSV export
+
+`toCsv()` prefixes any cell starting with `=`, `+`, `-`, `@` or a control character with
+an apostrophe. §3.3 makes the CSV the escape hatch, which means it gets opened in Excel
+by a stressed organizer; a problem statement beginning with "=" should not become a
+formula.

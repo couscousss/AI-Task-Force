@@ -1,0 +1,30 @@
+{
+  "name": "secc-builder-day",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate:local": "wrangler d1 migrations apply secc-builder-day --local",
+    "db:migrate:remote": "wrangler d1 migrations apply secc-builder-day --remote",
+    "seed:fake": "tsx scripts/seed-fake.ts",
+    "seed:local": "tsx scripts/seed-fake.ts --out scripts/.seed.sql && wrangler d1 execute secc-builder-day --local --file scripts/.seed.sql"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "hono": "^4.13.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260823.1",
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
+    "typescript": "~5.9.0",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.125.0"
+  }
+}
