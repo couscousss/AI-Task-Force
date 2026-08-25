@@ -28,9 +28,20 @@ die()  { printf '\n\033[31m✕ %s\033[0m\n' "$*" >&2; exit 1; }
 # ---------------------------------------------------------------- 1. prerequisites
 say "1/5  Checking prerequisites"
 
-command -v node >/dev/null || die "Node is not installed. Install Node 20 or newer, then re-run."
+# Wrangler 4 needs Node 20 or newer.
+command -v node >/dev/null || die "Node is not installed.
+
+  On a Mac, either:
+    brew install node                       (if you have Homebrew)
+    https://nodejs.org  -> download the LTS installer and run it
+
+  Then open a NEW terminal window and run this script again."
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 18 ] || die "Node $NODE_MAJOR is too old. Install Node 20 or newer, then re-run."
+[ "$NODE_MAJOR" -ge 20 ] || die "Node $NODE_MAJOR is too old — Wrangler needs 20 or newer.
+
+  brew upgrade node    or    https://nodejs.org -> download the LTS installer
+
+  Then open a NEW terminal window and run this script again."
 ok "node $(node -v)"
 
 [ -d node_modules ] || { warn "Installing dependencies (one minute or so)"; npm install; }
