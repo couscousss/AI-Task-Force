@@ -136,6 +136,21 @@ dashboardRoutes.get('/', async (c) => {
         </a>
       }
     >
+      <Card
+        title="The link to share"
+        sub="Send this to the whole department. Anyone who opens it can fill the form in — no invite list needed."
+      >
+        <label class="visually-hidden" for="share-link">
+          Link to share with participants
+        </label>
+        <input id="share-link" type="text" readonly value={`${cfg.publicOrigin}/join`} />
+        <p class="hint" style="margin-top:0.5rem">
+          Everyone who fills it in appears under <a href="/admin/participants">Participants</a>. If
+          someone comes back to the same link with the same email, it updates their answers rather
+          than adding them twice.
+        </p>
+      </Card>
+
       <Card title="Laptop supply" sub="The constraint that decides whether the day works.">
         <div class="grid grid-2">
           <Stat

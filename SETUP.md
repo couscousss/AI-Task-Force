@@ -1,23 +1,36 @@
 # Getting this live
 
-Read the first section before you start. It decides how the next three hours go.
+## The short version
+
+Deploy once, then send your department **one link**. That is the whole flow.
+
+```bash
+git clone https://github.com/couscousss/AI-Task-Force.git
+cd AI-Task-Force && git checkout claude/web-application-k0lv8g
+./scripts/setup.sh
+```
+
+The script prints your URL. Share that URL. Anyone who opens it fills the form in —
+no invite list, no personal links, no email needed.
+
+The rest of this file is detail you can read while it runs.
 
 ---
 
-## The one thing that can blow your deadline
+## You do not need email, and you do not need an invite list
 
-Everything here takes about twenty minutes **except sending email from your own
-domain**, which needs DNS records to propagate and is outside your control.
+The link works for everybody. Someone's email address is their identity: if they come
+back to the same link later and enter the same address, it updates their answers instead
+of adding them twice.
 
-The app is built so that email is optional. Without it:
+An invite list is still worth uploading **if you want to know who has not replied yet** —
+that is the one thing an open link cannot tell you. Both work together; people who were
+invited and then use the open link are matched to their existing record, not duplicated.
 
-- Personal links are on every row of **Participants**, and in the **CSV export**.
-- You hand them out by mail-merge, by pasting into your own mail client, or over Slack.
-- Everything else — the form, grouping, the review board, the projected team list —
-  works exactly the same.
-
-**So: deploy first, decide about email second.** Do not let a DNS record hold up the
-rest.
+Email is entirely optional. Every participant's personal edit link is on their row under
+**Participants** and in the **CSV export**, so you can hand them out by hand if you ever
+need to. Sending from your own domain needs DNS records to propagate, which is the only
+step here with a delay outside your control — so leave it until last, or skip it.
 
 ---
 
@@ -80,21 +93,26 @@ Open `wrangler.jsonc` and set these, then run `npm run deploy`:
 
 ---
 
-## Step 4 — Load the people (5 minutes)
+## Step 4 — Send the link (1 minute)
 
-`/admin/invites` → upload a CSV with a name column and an email column, in either
-order, with or without a header row. It reports exactly what it did, including every
-line it skipped and why.
+Share `https://your-worker.workers.dev` with the department. It goes straight to the
+form. The same link is shown at the top of `/admin` so you can copy it from there.
 
-Then `/admin` shows you responses, attendance and — most importantly — the laptop
-count, which is the number that decides whether the day works.
+**Optional:** if you also want to track who has *not* replied, upload an invite list at
+`/admin/invites` — a CSV with a name column and an email column, in either order, with or
+without a header row. It reports exactly what it did, including every line it skipped and
+why. People who were invited and then use the open link are matched to their existing
+record rather than duplicated.
+
+`/admin` then shows responses, attendance and — most importantly — the laptop count,
+which is the number that decides whether the day works.
 
 ---
 
 ## Step 5 — Try it end to end before anyone else does (10 minutes)
 
-1. **Participants** → find yourself → copy your personal link → fill the form in as if
-   you were an attendee. Check it looks right on your phone.
+1. Open your own URL on your phone and fill the form in as if you were an attendee.
+   Check you appear under **Participants** afterwards.
 2. **Grouping runs** → **Start a run**. Watch the progress. It takes a few seconds.
 3. **Review teams** → drag someone between two teams and watch the warnings update.
 4. **Publish teams** → open `/teams` on the actual projector you will use on the day,

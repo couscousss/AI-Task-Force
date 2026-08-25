@@ -12,7 +12,13 @@ import {
   type SkillAxis,
 } from '../config';
 import type { ParticipantRow } from '../types';
-import { getByEmail, getByToken, saveSubmission, type FormSubmission } from '../db/participants';
+import {
+  ensureInvite,
+  getByEmail,
+  getByToken,
+  saveSubmission,
+  type FormSubmission,
+} from '../db/participants';
 import { formatLocalDate, formatLocalDateTime, isPast } from '../lib/dates';
 import { verifyTurnstile } from '../lib/turnstile';
 import {
@@ -214,9 +220,11 @@ interface FormPageProps {
   phase: Phase;
   /** Set when a POST was refused outright (closed form, failed bot check): says so at the top. */
   blocked?: string;
+  /** Where the form posts. Defaults to the personal link; `/join` uses the open one. */
+  action?: string;
 }
 
-function FormPage({ cfg, row, values: v, errors, phase, blocked }: FormPageProps) {
+function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormPageProps) {
   const readOnly = phase !== 'open';
   const deadline = formatLocalDateTime(cfg.formDeadline, cfg.localUtcOffsetHours);
   const opens = formatLocalDateTime(cfg.formOpens, cfg.localUtcOffsetHours);
@@ -274,7 +282,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked }: FormPageProps
           </Callout>
         ) : null}
 
-        <form method="post" action={`/r/${row.token}`} id="checkin-form">
+        <form method="post" action={action ?? `/r/${row.token}`} id="checkin-form">
           {/* 1. Name */}
           <div class={fieldClass(errors['name'])}>
             <label for="name">
@@ -732,6 +740,125 @@ function UnknownLinkPage({ cfg }: { cfg: EventConfig }) {
 
 /* ---------------------------------------------------------------- handlers */
 
+/**
+ * One validation pass, shared by the personal link and the open `/join` link, so the two
+ * entry points can never drift on what counts as a valid answer.
+ *
+ * `current` is the row being edited, or null on the open link where the person is not
+ * known yet. The only behavioural difference is the email check: on a personal link a
+ * different address that already exists is a clash and is refused, whereas on the open
+ * link an existing address simply means we are updating that person's answers.
+ */
+async function validateSubmission(
+  db: D1Database,
+  body: Record<string, unknown>,
+  current: ParticipantRow | null,
+): Promise<{ values: Values; errors: Errors; submission: FormSubmission | null }> {
+  const v = valuesFromBody(body);
+  const errors: Errors = {};
+
+  const name = squish(v.name);
+  if (name === '') errors['name'] = 'Add your name so the organizers know whose answers these are.';
+  else if (name.length > 120) errors['name'] = 'That is too long for the name field — 120 characters or fewer.';
+
+  const attending =
+    v.attending === String(ATTENDING.yes)
+      ? ATTENDING.yes
+      : v.attending === String(ATTENDING.no)
+        ? ATTENDING.no
+        : v.attending === String(ATTENDING.unsure)
+          ? ATTENDING.unsure
+          : null;
+  if (attending === null) {
+    errors['attending'] = 'Pick one: yes, no, or not sure yet. "Not sure yet" still keeps your place.';
+  }
+
+  const email = normalizeEmail(v.email);
+  if (email === '') {
+    errors['email'] = 'Add your email — it is how we send you your team.';
+  } else if (!isValidEmail(email)) {
+    errors['email'] = 'That does not look like an email address. Check for a missing @ or a typo in the domain.';
+  } else if (current && email !== current.email) {
+    const clash = await getByEmail(db, email);
+    if (clash && clash.id !== current.id) {
+      errors['email'] =
+        'We already have a separate form for that address. Use the personal link that was emailed to it, or ask the organizers to merge the two.';
+    }
+  }
+
+  const department = squish(v.department);
+  if (department.length > 120) errors['department'] = 'That is too long — 120 characters or fewer.';
+
+  // A decline is a complete answer. Everything below is optional in that case, and the
+  // server is the authority: form.js only hides these fields, it never enforces anything.
+  const declining = attending === ATTENDING.no;
+
+  const problemStatement = v.problem_statement.trim();
+  if (!declining) {
+    const check = checkProblemStatement(problemStatement);
+    if (!check.ok) errors['problem_statement'] = check.message ?? 'Please describe the challenge.';
+  }
+
+  const category = isValidCategory(v.category) ? v.category : null;
+  if (!declining && category === null) {
+    errors['category'] = 'Choose the closest fit. "Not sure yet" is a real answer.';
+  }
+
+  const skillValues: Partial<Record<SkillAxis, number>> = {};
+  for (const axis of SKILL_AXES) {
+    const raw = v.skills[axis];
+    if (isValidSkill(raw)) {
+      skillValues[axis] = Number(raw);
+    } else if (!declining) {
+      errors[`skill_${axis}`] = `Pick a level for ${SKILL_AXIS_LABELS[axis].label}. Your honest guess is the right answer.`;
+    }
+  }
+  const { understanding, tools, prompting, building } = skillValues;
+  const skills =
+    understanding !== undefined && tools !== undefined && prompting !== undefined && building !== undefined
+      ? { understanding, tools, prompting, building }
+      : null;
+
+  const laptop = v.has_personal_laptop === '1' ? 1 : v.has_personal_laptop === '0' ? 0 : null;
+  if (!declining && laptop === null) {
+    errors['has_personal_laptop'] =
+      'Say yes or no. Teams are built around who can bring a machine, so we cannot leave this blank.';
+  }
+
+  const hopes = v.hopes.trim();
+  if (hopes.length > 2000) errors['hopes'] = 'That is longer than we can store. Trim it to about 2000 characters.';
+
+  if (Object.keys(errors).length > 0 || attending === null) {
+    return { values: v, errors, submission: null };
+  }
+
+  return {
+    values: v,
+    errors,
+    submission: {
+      name,
+      email,
+      attending,
+      department: department || null,
+      problem_statement: problemStatement || null,
+      category,
+      skills,
+      has_personal_laptop: laptop,
+      hopes: hopes || null,
+    },
+  };
+}
+
+/** A stand-in row for the open link, where nobody is identified until they submit. */
+function blankRow(): ParticipantRow {
+  return {
+    id: '', token: '', email: '', name: null, department: null, attending: null,
+    problem_statement: null, category: null, skill_understanding: null, skill_tools: null,
+    skill_prompting: null, skill_building: null, has_personal_laptop: null, hopes: null,
+    submitted_at: null, updated_at: null,
+  };
+}
+
 participantRoutes.get('/r/:token', async (c) => {
   const cfg = loadConfig(c.env);
   const row = await getByToken(c.env.DB, c.req.param('token'));
@@ -796,102 +923,99 @@ participantRoutes.post('/r/:token', async (c) => {
     }
   }
 
-  const name = squish(v.name);
-  if (name === '') errors['name'] = 'Add your name so the organizers know whose answers these are.';
-  else if (name.length > 120) errors['name'] = 'That is too long for the name field — 120 characters or fewer.';
-
-  const attendingRaw = v.attending;
-  const attending =
-    attendingRaw === String(ATTENDING.yes)
-      ? ATTENDING.yes
-      : attendingRaw === String(ATTENDING.no)
-        ? ATTENDING.no
-        : attendingRaw === String(ATTENDING.unsure)
-          ? ATTENDING.unsure
-          : null;
-  if (attending === null) {
-    errors['attending'] = 'Pick one: yes, no, or not sure yet. "Not sure yet" still keeps your place.';
+  const { values, errors: fieldErrors, submission } = await validateSubmission(c.env.DB, body, row);
+  if (!submission) {
+    return c.html(<FormPage cfg={cfg} row={row} values={values} errors={fieldErrors} phase={phase} />, 422);
   }
-
-  const email = normalizeEmail(v.email);
-  if (email === '') {
-    errors['email'] = 'Add your email — it is how we send you your team.';
-  } else if (!isValidEmail(email)) {
-    errors['email'] = 'That does not look like an email address. Check for a missing @ or a typo in the domain.';
-  } else if (email !== row.email) {
-    const clash = await getByEmail(c.env.DB, email);
-    if (clash && clash.id !== row.id) {
-      errors['email'] =
-        'We already have a separate form for that address. Use the personal link that was emailed to it, or ask the organizers to merge the two.';
-    }
-  }
-
-  const department = squish(v.department);
-  if (department.length > 120) {
-    errors['department'] = 'That is too long — 120 characters or fewer.';
-  }
-
-  // A decline is a complete answer. Everything below is optional in that case, and the
-  // server is the authority: form.js only hides these fields, it never enforces anything.
-  const declining = attending === ATTENDING.no;
-
-  const problemStatement = v.problem_statement.trim();
-  if (!declining) {
-    const check = checkProblemStatement(problemStatement);
-    if (!check.ok) errors['problem_statement'] = check.message ?? 'Please describe the challenge.';
-  }
-
-  const category = isValidCategory(v.category) ? v.category : null;
-  if (!declining && category === null) {
-    errors['category'] = 'Choose the closest fit. "Not sure yet" is a real answer.';
-  }
-
-  const skillValues: Partial<Record<SkillAxis, number>> = {};
-  for (const axis of SKILL_AXES) {
-    const raw = v.skills[axis];
-    if (isValidSkill(raw)) {
-      skillValues[axis] = Number(raw);
-    } else if (!declining) {
-      errors[`skill_${axis}`] = `Pick a level for ${SKILL_AXIS_LABELS[axis].label}. Your honest guess is the right answer.`;
-    }
-  }
-  const understanding = skillValues.understanding;
-  const tools = skillValues.tools;
-  const prompting = skillValues.prompting;
-  const building = skillValues.building;
-  const skills =
-    understanding !== undefined && tools !== undefined && prompting !== undefined && building !== undefined
-      ? { understanding, tools, prompting, building }
-      : null;
-
-  const laptop = v.has_personal_laptop === '1' ? 1 : v.has_personal_laptop === '0' ? 0 : null;
-  if (!declining && laptop === null) {
-    errors['has_personal_laptop'] =
-      'Say yes or no. Teams are built around who can bring a machine, so we cannot leave this blank.';
-  }
-
-  const hopes = v.hopes.trim();
-  if (hopes.length > 2000) {
-    errors['hopes'] = 'That is longer than we can store. Trim it to about 2000 characters.';
-  }
-
-  if (Object.keys(errors).length > 0 || attending === null) {
-    return c.html(<FormPage cfg={cfg} row={row} values={v} errors={errors} phase={phase} />, 422);
-  }
-
-  const submission: FormSubmission = {
-    name,
-    email,
-    attending,
-    department: department || null,
-    problem_statement: problemStatement || null,
-    category,
-    skills,
-    has_personal_laptop: laptop,
-    hopes: hopes || null,
-  };
   await saveSubmission(c.env.DB, row, submission);
 
   // POST-redirect-GET: a refresh on the confirmation must not resubmit.
+  return c.redirect(`/r/${row.token}?saved=1`, 303);
+});
+
+/* ------------------------------------------------------------------ the open link */
+
+/**
+ * `/join` is the single URL an organizer can put in one message to the whole department.
+ * No token, no invite list needed: whoever opens it fills the same form, and their email
+ * becomes their identity. Filling it in again from the same address updates the same
+ * record rather than creating a second one, so a colleague who loses their link can just
+ * open /join again.
+ */
+participantRoutes.get('/join', (c) => {
+  const cfg = loadConfig(c.env);
+  return c.html(
+    <FormPage
+      cfg={cfg}
+      row={blankRow()}
+      values={valuesFromRow(blankRow())}
+      errors={{}}
+      phase={phaseOf(cfg)}
+      action="/join"
+    />,
+  );
+});
+
+participantRoutes.post('/join', async (c) => {
+  const cfg = loadConfig(c.env);
+  const phase = phaseOf(cfg);
+
+  if (phase !== 'open') {
+    return c.html(
+      <FormPage
+        cfg={cfg}
+        row={blankRow()}
+        values={valuesFromRow(blankRow())}
+        errors={{}}
+        phase={phase}
+        action="/join"
+        blocked={
+          phase === 'closed'
+            ? `Nothing was saved — the form closed on ${formatLocalDateTime(cfg.formDeadline, cfg.localUtcOffsetHours)}.`
+            : `Nothing was saved — the form does not open until ${formatLocalDateTime(cfg.formOpens, cfg.localUtcOffsetHours)}.`
+        }
+      />,
+      403,
+    );
+  }
+
+  const body = await c.req.parseBody();
+
+  if (cfg.turnstileSiteKey) {
+    const ok = await verifyTurnstile(
+      c.env,
+      bodyField(body, 'cf-turnstile-response') || null,
+      c.req.header('CF-Connecting-IP') ?? null,
+    );
+    if (!ok) {
+      const blocked =
+        'The check that you are a person did not complete. Reload this page, tick the box, and save again.';
+      return c.html(
+        <FormPage
+          cfg={cfg}
+          row={blankRow()}
+          values={valuesFromBody(body)}
+          errors={{ turnstile: blocked }}
+          phase={phase}
+          action="/join"
+          blocked={blocked}
+        />,
+        400,
+      );
+    }
+  }
+
+  const { values, errors, submission } = await validateSubmission(c.env.DB, body, null);
+  if (!submission) {
+    return c.html(
+      <FormPage cfg={cfg} row={blankRow()} values={values} errors={errors} phase={phase} action="/join" />,
+      422,
+    );
+  }
+
+  // Their email is the identity. Returning from the same address edits the same record.
+  const { row } = await ensureInvite(c.env.DB, { name: submission.name, email: submission.email });
+  await saveSubmission(c.env.DB, row, submission);
+
   return c.redirect(`/r/${row.token}?saved=1`, 303);
 });

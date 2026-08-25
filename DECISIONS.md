@@ -319,3 +319,27 @@ the progressive-enhancement rule, so it is stated plainly on the page: if JavaSc
 off, the run page says so and points at the CSV export. The participant form — the part
 the spec cared about, filled in on phones with bad wifi — is untouched and still works
 with JavaScript disabled.
+
+---
+
+## One open link, not only personal token links
+
+§4 says participants are seeded from an invite list rather than self-registering, because
+that is what lets organizers see who has *not* replied. That reason is real and the invite
+flow is still there.
+
+But it makes the smallest version of this event needlessly heavy: to collect any answers
+at all you first have to assemble a list, upload it, and distribute forty individual URLs.
+For an organizer who just wants to put one link in one message to their department, that
+is the wrong shape.
+
+`/join` is that link, and the bare domain redirects to it. Email address is the identity:
+returning to the link from the same address updates that person's answers rather than
+creating a second record, and someone who was on the invite list is matched to their
+existing row, keeping the personal link they were sent. Both routes run the same
+`validateSubmission`, so the two entry points cannot drift on what counts as a valid
+answer.
+
+What is given up: with no invite list there is no denominator, so the dashboard can show
+how many people replied but not how many have not. Uploading a list is still offered, and
+is worth it when chasing non-responders matters.
