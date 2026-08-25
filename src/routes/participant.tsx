@@ -379,9 +379,6 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             <label for="email">
               Your email <span class="req" aria-hidden="true">*</span>
             </label>
-            <p class="hint" id="email-hint">
-              Where we will send your team and the joining details.
-            </p>
             <input
               type="email"
               id="email"
@@ -391,7 +388,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
               required
               disabled={readOnly}
               aria-invalid={errors['email'] ? 'true' : undefined}
-              aria-describedby={describedBy('email-hint', errors['email'] && 'err-email')}
+              aria-describedby={describedBy(errors['email'] && 'err-email')}
             />
             {errors['email'] ? (
               <p class="error-text" id="err-email">
