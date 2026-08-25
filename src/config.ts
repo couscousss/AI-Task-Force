@@ -51,7 +51,7 @@ export const CATEGORIES: { value: string; label: string }[] = [
   { value: 'automate', label: 'Automating a manual process' },
   { value: 'search', label: 'Searching or summarizing documents' },
   { value: 'analysis', label: 'Data analysis and reporting' },
-  { value: 'product', label: 'A customer or user-facing tool' },
+  { value: 'product', label: 'A user-facing tool' },
   { value: 'content', label: 'Content and drafting' },
   { value: 'unsure', label: 'Not sure yet' },
 ];
@@ -156,7 +156,7 @@ export interface EventConfig {
 }
 
 export const EVENT_DEFAULTS: EventConfig = {
-  eventName: 'SECC AI Builder Day',
+  eventName: "SECC Inaugural AI Builder's Day",
   eventDate: '2026-09-22',
   formOpens: '2026-08-01T09:00:00+08:00',
   formDeadline: '2026-09-15T17:00:00+08:00',

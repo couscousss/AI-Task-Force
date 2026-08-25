@@ -261,10 +261,12 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
         </div>
         <div class="hero-text">
           <p class="hero-eyebrow">{eventDay}</p>
-          <h1>{cfg.eventName}</h1>
+          {/* The welcome names the event, so the heading is the welcome rather than the
+              event name again — cfg.eventName still drives the page title and email. */}
+          <h1>Welcome to the {cfg.eventName}!</h1>
           <p class="hero-lede">
             {phase === 'open'
-              ? 'Tell us whether you can make it and what you would like to build. Three minutes.'
+              ? "Please indicate your availability and what you would like to build. Sky's the limit!"
               : 'Your check-in form.'}
           </p>
           {phase === 'open' ? (
@@ -409,9 +411,6 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
                   *
                 </span>
               </label>
-              <p class="hint" id="department-hint">
-                We use it to mix people from different clusters across a team.
-              </p>
               <input
                 type="text"
                 id="department"
@@ -420,7 +419,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
                 autocomplete="organization-title"
                 disabled={readOnly}
                 aria-invalid={errors['department'] ? 'true' : undefined}
-                aria-describedby={describedBy('department-hint', errors['department'] && 'err-department')}
+                aria-describedby={describedBy(errors['department'] && 'err-department')}
               />
               {errors['department'] ? (
                 <p class="error-text" id="err-department">
@@ -798,7 +797,7 @@ async function validateSubmission(
   if (department.length > 120) {
     errors['department'] = 'That is too long — 120 characters or fewer.';
   } else if (department === '' && attending !== ATTENDING.no) {
-    errors['department'] = 'Add your cluster — it is what we use to mix people across teams.';
+    errors['department'] = 'Add your cluster.';
   }
 
   // A decline is a complete answer. Everything below is optional in that case, and the

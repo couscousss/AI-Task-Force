@@ -148,7 +148,7 @@ Open `wrangler.jsonc` and set these, then run `npm run deploy`:
 |---|---|
 | `EVENT_DATE` | Participants see the wrong date on the form |
 | `FORM_DEADLINE` | The form closes on the placeholder date |
-| `EVENT_NAME` | Says "SECC AI Builder Day" |
+| `EVENT_NAME` | Says "SECC Inaugural AI Builder's Day" |
 | `ORGANIZER_EMAILS` | The "contact the organizers" link has no address behind it |
 | `LOCAL_UTC_OFFSET_HOURS` | Reminder timing is set for UTC+8 |
 
