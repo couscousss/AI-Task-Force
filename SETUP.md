@@ -99,17 +99,39 @@ you own; a `workers.dev` URL is neither, so it cannot be protected by path. Prot
 `/admin` without also putting the participant form behind a login therefore means two
 Workers. They share one database, so there is one copy of the data.
 
-**Turn Access on for the admin Worker:**
+**Turn Access on — from a workflow, not by hand:**
 
-1. Cloudflare dashboard → **Zero Trust**. First time, it asks you to pick a team name and
-   a plan — choose **Free**.
-2. **Access** → **Applications** → **Add an application** → **Self-hosted**.
-3. Give it a name, then for the target choose the **`secc-builder-day-admin`** Worker.
-4. Next → name the policy → **Action: Allow** → Include → **Emails** → your work address.
-   (Or **Emails ending in** → your company domain, to let all the organizers in.)
-5. Save.
+1. Add two permissions to the API token you already made. Editing a token does **not**
+   change its secret, so nothing needs re-pasting into GitHub.
+
+   [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+   → your token → **Edit** → **Permissions** → **+ Add more**:
+
+   | | | |
+   |---|---|---|
+   | Account | Access: Apps and Policies | Edit |
+   | Account | Access: Organizations, Identity Providers, Groups | Edit |
+
+   The first dropdown must say **Account**, not Zone — Cloudflare has two different
+   permissions with the same display name, and the Zone one does not work here.
+
+2. **Actions** → **Protect the admin dashboard** → **Run workflow**. Type in who should
+   get in (commas between addresses; `@yourcompany.com` admits a whole domain).
 
 Open the admin URL. You get a one-time code by email, and you are in.
+
+The workflow reads the result back from Cloudflare afterwards and fails loudly if the
+application is not actually attached to the Worker, or if no Allow policy landed — so a
+green run means it is genuinely protected, not just that the API returned 200. It is safe
+to run again whenever the organizer list changes.
+
+**One thing the script may not be able to do for you.** Access applications hang off a
+Zero Trust *organization*, and Cloudflare wants that created through dashboard onboarding
+the first time — there is a plan-selection step in the way. The script tries anyway, and
+if Cloudflare refuses it prints the exact two-minute fix: open
+[one.dash.cloudflare.com](https://one.dash.cloudflare.com), pick a team name, choose the
+**Free** plan, re-run the workflow. That is the only dashboard step in this whole setup,
+and it happens once.
 
 **Do not put Access on the public Worker.** The form and the team list have to stay open —
 participants have no accounts, and the projected team list opens on a room laptop nobody

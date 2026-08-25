@@ -120,9 +120,15 @@ jobs:
             echo "only way to protect the organizer screens on a workers.dev URL without"
             echo "also putting the participant form behind a login."
             echo
-            echo "Zero Trust -> Access -> Applications -> Add an application -> Self-hosted,"
-            echo "then pick the **secc-builder-day-admin** Worker. Policy: Allow -> Emails ->"
-            echo "the organizers. Until that is done the admin Worker refuses every request."
+            echo "Until Access is on, the admin Worker refuses every request — including"
+            echo "yours. That is deliberate: it fails shut rather than open."
+            echo
+            echo "**You do not have to do this by hand.** Run the"
+            echo "**Protect the admin dashboard** workflow, which creates the Access"
+            echo "application and the policy for you and then reads them back to check."
+            echo "Its first run needs two extra permissions on the API token you already"
+            echo "have — the workflow file says which, and editing a token does not change"
+            echo "its secret."
             echo
             echo "Do not put Access on the public Worker — the form and the team list must"
             echo "stay open."

@@ -34,11 +34,14 @@ export async function requireAdmin(c: Context<AppBindings>, next: Next) {
   if (!email) {
     return c.text(
       'This page is not protected yet, so it is refusing to open.\n\n' +
-        'Put Cloudflare Access in front of /admin before using it:\n' +
-        '  Zero Trust -> Access -> Applications -> Add an application -> Self-hosted\n' +
-        '  Domain: this hostname.  Path: admin\n' +
-        '  Policy: Allow -> Emails -> the organizers\n\n' +
-        'Leave /join and /teams outside Access — participants have no accounts.\n\n' +
+        'Turn Cloudflare Access on for this Worker before using it. You do not have to\n' +
+        'do it by hand:\n\n' +
+        '  GitHub -> Actions -> "Protect the admin dashboard" -> Run workflow\n\n' +
+        'The first run needs two extra permissions on the Cloudflare API token you\n' +
+        'already have; the workflow file lists them. Editing a token does not change its\n' +
+        'secret, so nothing needs re-pasting.\n\n' +
+        'Leave the participant form and /teams outside Access — they are on the other\n' +
+        'Worker, and participants have no accounts.\n\n' +
         'Running locally? DEV_ADMIN_EMAIL stands in for the Access header, but only on\n' +
         'localhost, so that it can never do so on a deployed Worker.\n',
       403,

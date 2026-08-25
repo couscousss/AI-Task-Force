@@ -1,0 +1,78 @@
+name: Protect the admin dashboard
+
+# Turns Cloudflare Access on for the organizer Worker, so you do not have to find your way
+# around the Zero Trust dashboard.
+#
+# Before the first run, add two permissions to the API token you already made. Editing a
+# token does NOT change its secret, so nothing needs re-pasting into GitHub:
+#
+#   https://dash.cloudflare.com/profile/api-tokens
+#     -> your token -> Edit -> Permissions -> + Add more
+#
+#     Account | Access: Apps and Policies                         | Edit
+#     Account | Access: Organizations, Identity Providers, Groups | Edit
+#
+#   The first dropdown must say Account, not Zone. Cloudflare has two permissions with the
+#   same display name and the Zone one does not work here.
+#
+# Then: Actions -> Protect the admin dashboard -> Run workflow.
+#
+# Safe to run again whenever the organizer list changes — it updates the existing policy
+# rather than adding a second one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      emails:
+        description: 'Who can open the dashboard. Commas between. Use @yourcompany.com to admit a whole domain.'
+        required: true
+        default: 'marcusfoo.work@gmail.com'
+      team_name:
+        description: 'Only used if this account has no Zero Trust team yet. Must be unique across Cloudflare.'
+        required: false
+        default: 'secc-builder-day'
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ZT_TEAM_NAME: ${{ inputs.team_name }}
+    steps:
+      - name: Check the secrets are set
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ]  || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            echo "These are the same two the Deploy workflow uses."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Turn Access on
+        env:
+          ADMIN_EMAILS: ${{ inputs.emails }}
+        run: node scripts/setup-access.mjs 2>&1 | tee access.log
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Admin dashboard"
+            echo
+            echo '```'
+            cat access.log 2>/dev/null || echo "The step above did not get far enough to log anything."
+            echo '```'
+            echo
+            echo "Dashboard: https://secc-builder-day-admin.marcusfoo-work.workers.dev"
+            echo
+            echo "The participant form is a separate Worker and is not affected — it stays open."
+          } >> "$GITHUB_STEP_SUMMARY"
