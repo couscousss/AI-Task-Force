@@ -55,15 +55,23 @@ policy back from Cloudflare.
 
 ### Getting back to this version
 
-The tag `v1.0` is the record. It does not move, whatever happens to the branch later.
+Two markers point at the same commit, `a503fe4`:
+
+- **A branch called `v1.0` on GitHub.** Nothing is pushed to it, so it stays where it is.
+- **An annotated git tag `v1.0`**, which exists only in the working clone. Pushing tags was
+  refused by the credentials available at the time, so the branch is what survives on
+  GitHub. To turn it into a real tag, open
+  [Releases → new](https://github.com/couscousss/AI-Task-Force/releases/new), type `v1.0`,
+  choose *Create new tag on publish*, target the `v1.0` branch, and publish. Nothing breaks
+  if you never do — the branch already does the job.
 
 ```bash
 git checkout v1.0          # look at exactly this code
 git checkout -b fix v1.0   # start again from here
 ```
 
-To redeploy this version, push the tagged commit to the working branch — the Deploy
-workflow runs on every push and takes about 40 seconds.
+To redeploy this version, push commit `a503fe4` to the working branch — the Deploy workflow
+runs on every push and takes about 40 seconds.
 
 ### Not exercised at v1.0
 
