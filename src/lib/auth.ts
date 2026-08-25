@@ -7,18 +7,40 @@ import { loadConfig } from '../config';
  * session, and no password reset in this codebase.
  *
  * In production the Access policy on /admin/* guarantees the header is present and
- * signed. In `wrangler dev` there is no Access in front, so DEV_ADMIN_EMAIL stands in.
+ * signed. In `wrangler dev` there is no Access in front, so DEV_ADMIN_EMAIL stands in —
+ * but ONLY on a local hostname.
+ *
+ * That last clause is load-bearing. DEV_ADMIN_EMAIL is an ordinary var, so it ships with
+ * a deploy; without the hostname check, a deployed Worker with the var set would admit
+ * anyone who found the URL, before an Access policy is in place. Every participant's
+ * email and problem statement sits behind this middleware, so the failure has to be shut
+ * rather than open.
  */
+function isLocalDev(requestUrl: string): boolean {
+  try {
+    const { hostname } = new URL(requestUrl);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
 export async function requireAdmin(c: Context<AppBindings>, next: Next) {
   const header = c.req.header('Cf-Access-Authenticated-User-Email');
   const cfg = loadConfig(c.env);
-  const email = header?.trim().toLowerCase() || cfg.devAdminEmail?.toLowerCase() || null;
+  const fallback = isLocalDev(c.req.url) ? (cfg.devAdminEmail?.toLowerCase() ?? null) : null;
+  const email = header?.trim().toLowerCase() || fallback;
 
   if (!email) {
     return c.text(
-      'Admin access is protected by Cloudflare Access.\n\n' +
-        'If you are seeing this in production, the Access application is not covering /admin/*.\n' +
-        'If you are running `wrangler dev`, set DEV_ADMIN_EMAIL in wrangler.jsonc vars.\n',
+      'This page is not protected yet, so it is refusing to open.\n\n' +
+        'Put Cloudflare Access in front of /admin before using it:\n' +
+        '  Zero Trust -> Access -> Applications -> Add an application -> Self-hosted\n' +
+        '  Domain: this hostname.  Path: admin\n' +
+        '  Policy: Allow -> Emails -> the organizers\n\n' +
+        'Leave /join and /teams outside Access — participants have no accounts.\n\n' +
+        'Running locally? DEV_ADMIN_EMAIL stands in for the Access header, but only on\n' +
+        'localhost, so that it can never do so on a deployed Worker.\n',
       403,
     );
   }

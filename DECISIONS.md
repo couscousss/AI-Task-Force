@@ -368,3 +368,16 @@ Both call `scripts/provision-d1.mjs` rather than each having their own copy of t
 find-or-create-then-patch logic, so the routes cannot drift. The CI run also typechecks
 and runs the solver tests before deploying, and the provisioning script exits non-zero on
 failure so a missing permission stops the deploy instead of shipping against no database.
+
+## The dev auth fallback is gated on a local hostname
+
+`DEV_ADMIN_EMAIL` stands in for the Cloudflare Access header so `/admin` is reachable
+under `wrangler dev`. It is an ordinary var, so it ships with a deploy — and the first
+real deployment proved the consequence: with the var set and no Access policy yet in
+place, every admin screen was open to anyone who found the URL, with every participant's
+email and problem statement behind it.
+
+The fallback now applies only when the request hostname is `localhost`, `127.0.0.1` or
+`[::1]`. On any other host the middleware refuses and explains how to set up Access. A
+deployment that has not been protected yet fails shut rather than open, which is the
+right direction for a gate whose whole job is to be shut.
