@@ -3,15 +3,22 @@ import type { AppBindings } from './env';
 import type { Env } from './env';
 import { participantRoutes } from './routes/participant';
 import { publicTeamRoutes } from './routes/public-teams';
-import { adminRoutes } from './routes/admin';
 import { runReminderSweep } from './email/cron';
 import { Layout } from './ui/layout';
 
+/**
+ * The PUBLIC Worker: the check-in form and the projected team list, and nothing else.
+ *
+ * The organizer screens live in a separate Worker (src/admin.tsx) so that Cloudflare
+ * Access can be switched on for the whole of that one. Access attaches to a Worker or to
+ * a domain you own, and a workers.dev URL is neither yours nor path-scopable — so the only
+ * way to have company login on /admin without also putting the participant form behind a
+ * login is to make them two Workers. They share one D1 database.
+ */
 const app = new Hono<AppBindings>();
 
 app.route('/', participantRoutes);
 app.route('/', publicTeamRoutes);
-app.route('/admin', adminRoutes);
 
 app.get('/healthz', (c) => c.json({ ok: true }));
 

@@ -381,3 +381,28 @@ The fallback now applies only when the request hostname is `localhost`, `127.0.0
 `[::1]`. On any other host the middleware refuses and explains how to set up Access. A
 deployment that has not been protected yet fails shut rather than open, which is the
 right direction for a gate whose whole job is to be shut.
+
+## Two Workers, so that Access can protect the organizer side
+
+§2 says to put Cloudflare Access on `/admin/*` and write no authentication code. On a
+custom domain that is exactly right. On a `workers.dev` URL it is not possible: an Access
+application attaches to a Worker or to a domain in your own account, and `workers.dev` is
+neither yours nor path-scopable. Cloudflare's Worker-level Access covers `workers.dev`,
+but it protects the whole Worker — which would put the participant form behind a company
+login too.
+
+So the app deploys as two Workers over one D1 database: `secc-builder-day` (the form and
+the published team list, open to everyone) and `secc-builder-day-admin` (every organizer
+screen, entirely behind Access). The spec's actual requirement — Cloudflare does the
+authentication, this codebase contains none — is preserved; only the deployment shape
+changed.
+
+The subtlety worth knowing: every participant link the organizer screens display has to
+point at the *public* Worker, not the one being viewed. `PUBLIC_ORIGIN` on the admin
+Worker carries that, and the deploy workflow passes it the public Worker's real URL rather
+than reading it from a file, so it stays correct even if that Worker is renamed. Verified
+on both running Workers: the share link, the per-row personal links and the CSV export all
+resolve to the public hostname.
+
+A custom domain remains the better answer if one ever becomes available — it collapses
+this back to one Worker with path-scoped Access.

@@ -14,7 +14,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const DB_NAME = process.argv[2] ?? 'secc-builder-day';
-const CONFIG = 'wrangler.jsonc';
+// Both Workers bind the same database, so both configs carry the same id.
+const CONFIGS = ['wrangler.jsonc', 'wrangler.admin.jsonc'];
 
 function wrangler(args) {
   return execFileSync('npx', ['wrangler', ...args], {
@@ -85,15 +86,17 @@ if (id) {
   console.log(`Created database ${DB_NAME} (${id})`);
 }
 
-const before = readFileSync(CONFIG, 'utf8');
-const after = before.replace(/("database_id":\s*")[^"]*(")/, `$1${id}$2`);
-if (after === before && !before.includes(id)) {
-  console.error(`Could not find a database_id field to update in ${CONFIG}`);
-  process.exit(1);
-}
-if (after !== before) {
-  writeFileSync(CONFIG, after);
-  console.log(`Wrote the database id into ${CONFIG}`);
-} else {
-  console.log(`${CONFIG} already had the right database id`);
+for (const config of CONFIGS) {
+  const before = readFileSync(config, 'utf8');
+  const after = before.replace(/("database_id":\s*")[^"]*(")/, `$1${id}$2`);
+  if (after === before && !before.includes(id)) {
+    console.error(`Could not find a database_id field to update in ${config}`);
+    process.exit(1);
+  }
+  if (after !== before) {
+    writeFileSync(config, after);
+    console.log(`Wrote the database id into ${config}`);
+  } else {
+    console.log(`${config} already had the right database id`);
+  }
 }

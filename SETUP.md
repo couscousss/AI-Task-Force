@@ -85,25 +85,38 @@ At the end it prints your URL.
 
 ---
 
-## Step 2 — Lock the admin side (about 10 minutes)
+## Step 2 — Lock the organizer side
 
-**Do this before you send anyone a link.** Until you do, `/admin` is open to anyone
-who finds the URL.
+This deploys **two Workers**:
 
-1. Cloudflare dashboard → **Zero Trust** → **Access** → **Applications** → **Add an
-   application** → **Self-hosted**.
-2. Application domain: your worker's hostname. Path: `admin`.
-3. Policy: **Allow**, Include → **Emails** → the organizers' addresses. (Or **Emails
-   ending in** → your company domain.)
-4. Save.
+| Worker | What it serves | Who can reach it |
+|---|---|---|
+| `secc-builder-day` | the form and the published team list | everyone — this is the link you share |
+| `secc-builder-day-admin` | every organizer screen | only you, once Access is on |
 
-Leave `/r/*` and `/teams` **outside** Access — participants have no accounts, and the
-projected team list has to open on a room laptop nobody has logged into.
+They are separate for one reason. Cloudflare Access attaches to a Worker or to a domain
+you own; a `workers.dev` URL is neither, so it cannot be protected by path. Protecting
+`/admin` without also putting the participant form behind a login therefore means two
+Workers. They share one database, so there is one copy of the data.
 
-Check it worked: open `/admin` in a private window. You should be asked to
-authenticate.
+**Turn Access on for the admin Worker:**
 
----
+1. Cloudflare dashboard → **Zero Trust**. First time, it asks you to pick a team name and
+   a plan — choose **Free**.
+2. **Access** → **Applications** → **Add an application** → **Self-hosted**.
+3. Give it a name, then for the target choose the **`secc-builder-day-admin`** Worker.
+4. Next → name the policy → **Action: Allow** → Include → **Emails** → your work address.
+   (Or **Emails ending in** → your company domain, to let all the organizers in.)
+5. Save.
+
+Open the admin URL. You get a one-time code by email, and you are in.
+
+**Do not put Access on the public Worker.** The form and the team list have to stay open —
+participants have no accounts, and the projected team list opens on a room laptop nobody
+has logged into.
+
+Until Access is on, the admin Worker refuses every request. That is deliberate: an
+unprotected deployment fails shut rather than open.
 
 ## Step 3 — Set the event details (2 minutes)
 

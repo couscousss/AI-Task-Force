@@ -73,32 +73,57 @@ jobs:
       - name: Apply the schema
         run: npx wrangler d1 migrations apply secc-builder-day --remote
 
-      - name: Deploy
+      - name: Deploy the public Worker
         id: deploy
         run: |
-          npm run deploy 2>&1 | tee deploy.log
-          url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1 || true)"
+          npm run build:solver
+          npm run deploy:public 2>&1 | tee public.log
+          url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' public.log | head -1 || true)"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # PUBLIC_ORIGIN is passed in rather than read from the file, so the links the
+      # dashboard hands out follow the public Worker even if it is renamed.
+      - name: Deploy the admin Worker
+        id: deploy_admin
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          if [ -n "$url" ]; then
+            npx wrangler deploy -c wrangler.admin.jsonc --var "PUBLIC_ORIGIN:$url" 2>&1 | tee admin.log
+          else
+            npx wrangler deploy -c wrangler.admin.jsonc 2>&1 | tee admin.log
+          fi
+          admin_url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' admin.log | head -1 || true)"
+          echo "url=$admin_url" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
           url="${{ steps.deploy.outputs.url }}"
+          admin="${{ steps.deploy_admin.outputs.url }}"
           {
             echo "## Deployed"
             echo
             if [ -n "$url" ]; then
               echo "**Share this link with your department:** $url"
               echo
-              echo "Organizer dashboard: $url/admin"
-              echo "Published teams:     $url/teams"
+              echo "Published teams (for the projector): $url/teams"
             else
-              echo "Deployed, but the URL was not in the log — check the Deploy step above."
+              echo "Public Worker deployed, but its URL was not in the log — check the step above."
             fi
             echo
-            echo "### Before you share it"
+            if [ -n "$admin" ]; then
+              echo "**Organizer dashboard:** $admin"
+            fi
             echo
-            echo "Put Cloudflare Access in front of \`/admin\`, or your dashboard is open to"
-            echo "anyone with the URL. Zero Trust -> Access -> Applications -> Add ->"
-            echo "Self-hosted; path \`admin\`; policy Allow -> Emails -> the organizers."
-            echo "Leave \`/join\` and \`/teams\` open — that is the point of them."
+            echo "### The admin Worker needs Cloudflare Access"
+            echo
+            echo "It is a separate Worker so that Access can cover all of it, which is the"
+            echo "only way to protect the organizer screens on a workers.dev URL without"
+            echo "also putting the participant form behind a login."
+            echo
+            echo "Zero Trust -> Access -> Applications -> Add an application -> Self-hosted,"
+            echo "then pick the **secc-builder-day-admin** Worker. Policy: Allow -> Emails ->"
+            echo "the organizers. Until that is done the admin Worker refuses every request."
+            echo
+            echo "Do not put Access on the public Worker — the form and the team list must"
+            echo "stay open."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run build:solver && wrangler dev",
-    "deploy": "npm run build:solver && wrangler deploy",
+    "dev": "wrangler dev -c wrangler.jsonc",
+    "deploy": "npm run build:solver && npm run deploy:public && npm run deploy:admin",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -13,7 +13,10 @@
     "db:migrate:remote": "wrangler d1 migrations apply secc-builder-day --remote",
     "seed:fake": "tsx scripts/seed-fake.ts",
     "seed:local": "tsx scripts/seed-fake.ts --out scripts/.seed.sql && wrangler d1 execute secc-builder-day --local --file scripts/.seed.sql",
-    "build:solver": "esbuild src/grouping/browser.ts --bundle --format=iife --target=es2020 --minify --outfile=public/solver.js"
+    "build:solver": "esbuild src/grouping/browser.ts --bundle --format=iife --target=es2020 --minify --outfile=public/solver.js",
+    "deploy:public": "wrangler deploy -c wrangler.jsonc",
+    "deploy:admin": "wrangler deploy -c wrangler.admin.jsonc",
+    "dev:admin": "wrangler dev -c wrangler.admin.jsonc --port 8788"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
