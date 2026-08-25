@@ -1,5 +1,19 @@
 # Versions
 
+## Since v1.0
+
+**The shared link now remembers you.** Reported from real use: after saving, the page says
+the answers can be changed any time — but the link people keep is the one the organizer
+sent, and opening that again showed a blank form asking for a name and email from scratch.
+Nothing was ever lost, since email is the identity and re-submitting updates the same
+record, but retyping a problem statement in order to change one checkbox is a good reason
+to give up half way.
+
+Saving now drops the participant's own token in a cookie, and the shared link hands their
+answers back on the next visit from that device. A different phone or computer has no
+cookie, so the confirmation page also shows their personal link for that case, and the
+form carries a "Not you?" link that clears the cookie for a machine two people share.
+
 ## v1.0 — 25 August 2026
 
 **The known-good release.** Everything works end to end and it is deployed. If a later

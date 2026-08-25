@@ -12,6 +12,7 @@ import {
   type SkillAxis,
 } from '../config';
 import type { ParticipantRow } from '../types';
+import { forgetCookie, rememberCookie, rememberedToken } from '../lib/remember';
 import {
   ensureInvite,
   getByEmail,
@@ -311,7 +312,16 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
 
         {phase === 'open' && row.submitted_at && Object.keys(errors).length === 0 ? (
           <Callout tone="good" title="Saved">
-            <p>We have your answers. Change anything below and save again — the newest version wins.</p>
+            <p>
+              We have your answers{row.name ? `, ${row.name}` : ''}. Change anything below and save again
+              — the newest version wins.
+            </p>
+            {/* This browser is remembered, so the shared link lands here rather than on a
+                blank form. On a machine somebody else also uses, that is the wrong person —
+                so the way out is on the page rather than something to be worked out. */}
+            <p class="small">
+              Not you? <a href="/join?new=1">Fill in a new response instead</a>.
+            </p>
           </Callout>
         ) : null}
 
@@ -705,6 +715,23 @@ function ConfirmationPage({ cfg, row, phase }: { cfg: EventConfig; row: Particip
           )}
         </Callout>
 
+        {/* Saying "come back any time" is only true if coming back is actually easy. It is
+            the shared link people keep, not this personal URL, so say plainly that the
+            shared one now works — and give them the personal one for a different device,
+            where the cookie will not be. */}
+        {phase === 'open' ? (
+          <Callout tone="info" title="Coming back later">
+            <p>
+              On this device, just open the same link the organizers sent — it will bring you straight
+              back here instead of asking again.
+            </p>
+            <p class="small">
+              On a different phone or computer, use your own link:{' '}
+              <a class="mono" href={`/r/${row.token}`}>{`/r/${row.token}`}</a>
+            </p>
+          </Callout>
+        ) : null}
+
         <Card title="What you told us">
           <AnswersTable row={row} />
         </Card>
@@ -937,6 +964,10 @@ participantRoutes.post('/r/:token', async (c) => {
   }
   await saveSubmission(c.env.DB, row, submission);
 
+  // Remember them here as well as on /join: somebody who arrived by their emailed personal
+  // link should still be recognised if they later open the shared one.
+  c.header('Set-Cookie', rememberCookie(row.token, c.req.url));
+
   // POST-redirect-GET: a refresh on the confirmation must not resubmit.
   return c.redirect(`/r/${row.token}?saved=1`, 303);
 });
@@ -950,8 +981,26 @@ participantRoutes.post('/r/:token', async (c) => {
  * record rather than creating a second one, so a colleague who loses their link can just
  * open /join again.
  */
-participantRoutes.get('/join', (c) => {
+participantRoutes.get('/join', async (c) => {
   const cfg = loadConfig(c.env);
+
+  // Somebody who has already answered on this device gets their own answers back rather
+  // than a blank form. ?new=1 is the way out for a shared machine, and is linked from the
+  // form itself.
+  if (c.req.query('new') !== '1') {
+    const token = rememberedToken(c.req.header('Cookie'));
+    if (token) {
+      // Look the row up before redirecting: an organizer may have deleted them, and a
+      // redirect to a dead token would land them on "that link did not work" with no idea
+      // why. A stale cookie is cleared instead.
+      const known = await getByToken(c.env.DB, token);
+      if (known) return c.redirect(`/r/${known.token}`, 302);
+      c.header('Set-Cookie', forgetCookie(c.req.url));
+    }
+  } else {
+    c.header('Set-Cookie', forgetCookie(c.req.url));
+  }
+
   return c.html(
     <FormPage
       cfg={cfg}
@@ -1024,6 +1073,9 @@ participantRoutes.post('/join', async (c) => {
   // Their email is the identity. Returning from the same address edits the same record.
   const { row } = await ensureInvite(c.env.DB, { name: submission.name, email: submission.email });
   await saveSubmission(c.env.DB, row, submission);
+
+  // From here on, opening the shared link on this device brings their answers back.
+  c.header('Set-Cookie', rememberCookie(row.token, c.req.url));
 
   return c.redirect(`/r/${row.token}?saved=1`, 303);
 });
