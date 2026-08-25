@@ -281,3 +281,41 @@ response.
   not behind Cloudflare Access.
 - **An emptied team name rendered as a blank heading**, because `?? 'Team N'` does not fire
   for an empty string.
+
+---
+
+## The solver runs in the browser, so the free Cloudflare plan is enough
+
+The build spec says to assume the Workers Paid plan, because "the free tier's 10ms CPU
+limit will not accommodate the team solver". That is correct — measured here, balancing
+takes 12ms for 40 people, 25ms for 80 and 61ms for 150, and switching local search off
+entirely only brings 150 people down to 14ms. No amount of tuning fits it into 10ms.
+
+Rather than require a paid plan, the balancing step moved into the organizer's browser.
+This is only possible because §6 required the grouping engine to be a pure module with no
+D1 or network calls inside it: the same bundle runs unchanged in a browser.
+
+The split is now:
+
+- **Worker** — loads participants, clusters the problem statements (a network call, so
+  cheap in CPU terms), hands the browser a seeded input, then names and persists what
+  comes back. All I/O, no computation.
+- **Browser** — runs `solve()` and posts the arrangement.
+
+Three things keep this honest:
+
+1. **The result is identical.** The run carries its seed, the solver is deterministic, and
+   a browser solve and a server solve of the same pool were compared directly: weighted
+   total 4.857067 and theme cohesion 0.90625 from both.
+2. **The membership is checked, not trusted.** The server rejects an unknown participant
+   id or the same person on two teams, and a second POST for a run that is already done is
+   a no-op rather than a duplicate write.
+3. **The score is recomputed server-side**, which costs 0.15ms, so the numbers an
+   organizer reads always come from the same code path as everything else — never from
+   whatever the page sent.
+
+The cost is that this one admin screen needs JavaScript. That is a real departure from
+the progressive-enhancement rule, so it is stated plainly on the page: if JavaScript is
+off, the run page says so and points at the CSV export. The participant form — the part
+the spec cared about, filled in on phones with bad wifi — is untouched and still works
+with JavaScript disabled.

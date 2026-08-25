@@ -74,6 +74,8 @@ Never edit an applied migration; add a new numbered file.
 
 ## Deploy
 
+The free Cloudflare plan is enough — see "Where the solver runs" below.
+
 ```bash
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put RESEND_API_KEY
@@ -220,6 +222,18 @@ people with a laptop; every team has someone rating themselves 3+ on Building; n
 entirely novices. When the room itself cannot satisfy one of these, the run does not fail
 and does not quietly relax it: it spreads the scarce resource as evenly as it can and
 tells you, in a sentence with real numbers, what is short and what you might do about it.
+
+**Where the solver runs.** Balancing needs 12ms of CPU for 40 people and 61ms for 150.
+A Worker on Cloudflare's free plan is cut off at 10ms per request, so that one step runs
+in the organizer's browser: the Worker clusters the problem statements, hands the browser
+a seeded input, and the browser posts the arrangement back to be named and stored. The
+solver is a pure module with no database or network access inside it, which is what makes
+this possible — same code, same seed, identical teams. The server re-checks the
+membership and recomputes the score and violations itself, so the numbers on screen never
+come from the page. Keep the tab open for the few seconds it takes; the run page says so.
+
+On the Workers Paid plan none of this is necessary, but it costs nothing to leave as it
+is.
 
 **Soft score** — theme cohesion (3.0), within-team skill diversity (1.5), across-team
 balance (2.0), category match (1.0), department mixing (0.5). All five are computed on the

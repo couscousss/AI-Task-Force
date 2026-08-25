@@ -4,15 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "npm run build:solver && wrangler dev",
+    "deploy": "npm run build:solver && wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate:local": "wrangler d1 migrations apply secc-builder-day --local",
     "db:migrate:remote": "wrangler d1 migrations apply secc-builder-day --remote",
     "seed:fake": "tsx scripts/seed-fake.ts",
-    "seed:local": "tsx scripts/seed-fake.ts --out scripts/.seed.sql && wrangler d1 execute secc-builder-day --local --file scripts/.seed.sql"
+    "seed:local": "tsx scripts/seed-fake.ts --out scripts/.seed.sql && wrangler d1 execute secc-builder-day --local --file scripts/.seed.sql",
+    "build:solver": "esbuild src/grouping/browser.ts --bundle --format=iife --target=es2020 --minify --outfile=public/solver.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260823.1",
     "@types/node": "^26.2.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.12",
     "typescript": "~5.9.0",
     "vitest": "^4.1.11",

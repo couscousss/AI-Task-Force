@@ -53,6 +53,25 @@ export async function failRun(db: D1Database, id: string, error: string): Promis
     .run();
 }
 
+/**
+ * Park the clustering output and hand the balancing step to the organizer's browser.
+ * Written before the solve so a reload, or a second tab, picks up exactly the same
+ * input — the seed is already on the run, so the result is identical either way.
+ */
+export async function saveClusterStage(
+  db: D1Database,
+  runId: string,
+  themes: Theme[],
+  warnings: string[],
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE grouping_runs SET status = 'awaiting_solve', progress = ?, themes_json = ? WHERE id = ?`,
+    )
+    .bind('Balancing teams in your browser', JSON.stringify({ themes, warnings }), runId)
+    .run();
+}
+
 export async function getRun(db: D1Database, id: string): Promise<GroupingRunRow | null> {
   return db.prepare(`SELECT * FROM grouping_runs WHERE id = ?`).bind(id).first<GroupingRunRow>();
 }

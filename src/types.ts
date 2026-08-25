@@ -24,7 +24,19 @@ export interface ParticipantRow {
   updated_at: string | null;
 }
 
-export type RunStatus = 'pending' | 'clustering' | 'solving' | 'naming' | 'done' | 'failed';
+/**
+ * `awaiting_solve` means clustering is done and the balancing step is waiting for the
+ * organizer's browser to run it. The solver is a pure module, so it runs identically
+ * there — which keeps the expensive part off the Worker's CPU budget.
+ */
+export type RunStatus =
+  | 'pending'
+  | 'clustering'
+  | 'awaiting_solve'
+  | 'solving'
+  | 'naming'
+  | 'done'
+  | 'failed';
 
 export interface GroupingRunRow {
   id: string;

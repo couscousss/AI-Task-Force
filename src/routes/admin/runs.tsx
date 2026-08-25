@@ -16,7 +16,12 @@ import {
   parseViolations,
 } from '../../db/runs';
 import { listAttendingSubmitted } from '../../db/participants';
-import { executeRun } from '../../run/pipeline';
+import {
+  executeRun,
+  finishRun,
+  getSolveInput,
+  type SolvedTeamInput,
+} from '../../run/pipeline';
 import { originLooksSane } from '../../lib/auth';
 import { newSeed } from '../../lib/ids';
 import { formatLocalDateTime } from '../../lib/dates';
@@ -25,7 +30,7 @@ export const runRoutes = new Hono<AppBindings>();
 
 /* ------------------------------------------------------------------ shared bits */
 
-const IN_PROGRESS: RunStatus[] = ['pending', 'clustering', 'solving', 'naming'];
+const IN_PROGRESS: RunStatus[] = ['pending', 'clustering', 'awaiting_solve', 'solving', 'naming'];
 
 function isRunning(row: GroupingRunRow): boolean {
   return IN_PROGRESS.includes(row.status);
@@ -34,6 +39,7 @@ function isRunning(row: GroupingRunRow): boolean {
 const STATUS_WORD: Record<RunStatus, string> = {
   pending: 'Queued',
   clustering: 'Clustering',
+  awaiting_solve: 'Balancing teams',
   solving: 'Balancing teams',
   naming: 'Naming teams',
   done: 'Finished',
@@ -713,6 +719,38 @@ runRoutes.get('/:id/status', async (c) => {
   return c.json({ status: row.status, progress: row.progress ?? '', error: row.error ?? null });
 });
 
+/* ------------------------------- balancing, which happens in the organizer's browser */
+
+/**
+ * The solver needs more CPU than a Worker gets on the free plan, and it is a pure
+ * module with no database or network access inside it — so the browser runs it from
+ * this input and posts the arrangement back. Same seed, same teams, either way.
+ */
+runRoutes.get('/:id/solve-input', async (c) => {
+  const input = await getSolveInput(c.env, c.req.param('id'));
+  if (!input) return c.json({ error: 'That run is not waiting to be balanced.' }, 409);
+  return c.json(input);
+});
+
+runRoutes.post('/:id/solve-result', async (c) => {
+  let body: { teams?: SolvedTeamInput[]; theme_of?: Record<string, string> };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'The teams could not be read.' }, 400);
+  }
+  if (!Array.isArray(body.teams)) return c.json({ error: 'The teams were missing.' }, 400);
+
+  const result = await finishRun(
+    c.env,
+    c.req.param('id'),
+    body.teams,
+    body.theme_of && typeof body.theme_of === 'object' ? body.theme_of : {},
+  );
+  if (!result.ok) return c.json({ error: result.error }, 400);
+  return c.json({ ok: true });
+});
+
 /* ------------------------------------------------------------------ run detail */
 
 runRoutes.get('/:id', async (c) => {
@@ -735,8 +773,10 @@ runRoutes.get('/:id', async (c) => {
     .first<{ n: number }>();
   const teamCount = countRes?.n ?? 0;
 
-  // A meta refresh keeps the progress honest with JavaScript switched off.
-  const head = running ? <meta http-equiv="refresh" content="2" /> : undefined;
+  // A meta refresh keeps the progress honest with JavaScript switched off. It is not
+  // used while the browser is balancing, because reloading mid-solve would restart it.
+  const head =
+    running && row.status !== 'awaiting_solve' ? <meta http-equiv="refresh" content="2" /> : undefined;
 
   return c.html(
     <AdminPage
@@ -744,6 +784,7 @@ runRoutes.get('/:id', async (c) => {
       active="runs"
       email={email}
       head={head}
+      scripts={row.status === 'awaiting_solve' ? ['/solver.js', '/run.js'] : undefined}
       heading={running ? 'Building teams' : row.status === 'failed' ? 'This run failed' : 'Grouping run'}
       lede={`Started ${formatLocalDateTime(row.created_at, cfg.localUtcOffsetHours)} · seed ${row.seed}`}
       actions={
@@ -760,7 +801,7 @@ runRoutes.get('/:id', async (c) => {
         </Callout>
       ) : null}
 
-      {running ? (
+      {running && row.status !== 'awaiting_solve' ? (
         <Card title={STATUS_WORD[row.status]} sub="This page refreshes itself every two seconds.">
           <p class="stat-value" id="run-progress" role="status" aria-live="polite">
             {row.progress ?? 'Getting started'}
@@ -770,6 +811,33 @@ runRoutes.get('/:id', async (c) => {
             A run of 150 people usually finishes inside a minute. You can safely leave this page — the
             work carries on and the run will be waiting in <a href="/admin/runs">Grouping runs</a>.
           </p>
+        </Card>
+      ) : null}
+
+      {row.status === 'awaiting_solve' ? (
+        <Card title="Balancing teams" sub="This step runs in this browser — keep the tab open.">
+          <div id="solve-here" data-run-id={row.id}>
+            <p class="stat-value" id="solve-status" role="status" aria-live="polite">
+              Starting…
+            </p>
+          </div>
+          <p class="muted">
+            Building the teams needs more computing time than a free Cloudflare Worker is allowed,
+            so this browser does it instead. It takes a moment and the result is identical — the run
+            has a fixed seed, so the same people always land on the same teams.
+          </p>
+          <div id="solve-nojs">
+            <Callout tone="warn" title="JavaScript is switched off">
+              <p>
+                This step needs JavaScript in this browser. Turn it on and reload, or open this page
+                in another browser — the run is saved and will pick up where it left off.
+              </p>
+              <p>
+                If neither is possible, <a href="/admin/participants/export.csv">export the CSV</a>{' '}
+                and group by hand; every answer is in it.
+              </p>
+            </Callout>
+          </div>
         </Card>
       ) : null}
 

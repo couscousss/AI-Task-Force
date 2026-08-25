@@ -9,10 +9,18 @@
 
 import { DEFAULT_SOLVER_PARAMS, loadConfig } from '../config';
 import { listAttendingSubmitted, toSolverParticipant } from '../db/participants';
-import { failRun, getRun, parseParams, saveRunResult, setRunProgress } from '../db/runs';
+import {
+  failRun,
+  getRun,
+  parseParams,
+  parseThemes,
+  saveClusterStage,
+  saveRunResult,
+  setRunProgress,
+} from '../db/runs';
 import type { Env } from '../env';
-import { solve } from '../grouping';
-import type { SolverParticipant, Theme } from '../grouping/types';
+import { evaluateArrangement } from '../grouping';
+import type { SolverParams, SolverParticipant, Theme } from '../grouping/types';
 import { createLlmClient } from '../llm/client';
 import { clusterProblemStatements, type ClusterCandidate } from '../llm/cluster';
 import { firstNameOf, narrateTeams, type NarrateTeam } from '../llm/narrate';
@@ -61,51 +69,14 @@ export async function executeRun(env: Env, runId: string): Promise<void> {
     const clustered = await clusterProblemStatements(llm, candidates);
     warnings.push(...clustered.warnings);
 
-    // 2. Solve. Deterministic, seeded, and the only thing that decides who is with whom.
-    await setRunProgress(db, runId, 'solving', 'Balancing teams');
-    const participants: SolverParticipant[] = rows.map(toSolverParticipant);
-    const themes: Theme[] = clustered.themes;
-    const result = solve({ participants, themes, params, seed: run.seed });
-
-    if (result.teams.length === 0) {
-      await failRun(
-        db,
-        runId,
-        `No team could be formed from ${n} people with team sizes set to ${params.min_team_size}-${params.max_team_size}. Widen the team size bounds and start a new run.`,
-      );
-      return;
-    }
-
-    // 3. Name. The teams above are already final; this call only writes words.
-    await setRunProgress(db, runId, 'naming', `Naming ${result.teams.length} teams`);
-    const byId = new Map<string, ParticipantRow>(rows.map((r) => [r.id, r]));
-    const narrateInput: NarrateTeam[] = result.teams.map((t) => ({
-      index: t.index,
-      theme_label: t.theme_label,
-      theme_summary: t.theme_summary,
-      members: t.member_ids.map((id) => {
-        const row = byId.get(id);
-        return {
-          display_name: firstNameOf(row?.name),
-          problem_statement: row?.problem_statement ?? null,
-        };
-      }),
-    }));
-    const narrated = await narrateTeams(llm, narrateInput);
-    warnings.push(...narrated.warnings);
-
-    // 4. Persist. One batch, so the run either has all its teams or none of them.
-    await saveRunResult(
-      db,
-      runId,
-      result.teams,
-      narrated.narratives,
-      clustered.themes,
-      result.score,
-      result.violations,
-      warnings,
-      result.theme_of,
-    );
+    // 2. Hand the balancing step to the browser and stop here.
+    //
+    // The solver needs 12-60ms of CPU depending on the pool, and a Worker on the free
+    // plan is cut off at 10ms per request. It is a pure module with no database or
+    // network access inside it, so it runs identically in the organizer's browser from
+    // the same seeded input — same seed, same teams. The Worker keeps the parts that are
+    // I/O rather than computation: clustering, naming, and writing the result.
+    await saveClusterStage(db, runId, clustered.themes, warnings);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     await failRun(
@@ -116,4 +87,123 @@ export async function executeRun(env: Env, runId: string): Promise<void> {
       // The run row is unreachable; there is nothing further this Worker can do about it.
     });
   }
+}
+
+/** What the browser needs in order to run the solver itself. */
+export interface SolveInput {
+  participants: SolverParticipant[];
+  themes: Theme[];
+  params: SolverParams;
+  seed: number;
+}
+
+export async function getSolveInput(env: Env, runId: string): Promise<SolveInput | null> {
+  const db = env.DB;
+  const run = await getRun(db, runId);
+  if (!run || run.status !== 'awaiting_solve') return null;
+  const rows = await listAttendingSubmitted(db);
+  return {
+    participants: rows.map(toSolverParticipant),
+    themes: parseThemes(run).themes,
+    params: parseParams(run, DEFAULT_SOLVER_PARAMS),
+    seed: run.seed,
+  };
+}
+
+export interface SolvedTeamInput {
+  index: number;
+  theme_label: string;
+  theme_summary: string;
+  member_ids: string[];
+}
+
+/**
+ * Take the arrangement the browser produced, then name and persist it.
+ *
+ * The membership is checked here rather than trusted, and the score and violations are
+ * recomputed on the server — that only costs about 0.15ms, and it means the numbers an
+ * organizer reads always come from this code rather than from whatever the page sent.
+ */
+export async function finishRun(
+  env: Env,
+  runId: string,
+  teams: SolvedTeamInput[],
+  themeOf: Record<string, string>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const db = env.DB;
+  const run = await getRun(db, runId);
+  if (!run) return { ok: false, error: 'That run no longer exists.' };
+  if (run.status === 'done') return { ok: true };
+  if (run.status !== 'awaiting_solve') {
+    return { ok: false, error: `That run is ${run.status}, so it is not waiting for teams.` };
+  }
+
+  const config = loadConfig(env);
+  const params = parseParams(run, DEFAULT_SOLVER_PARAMS);
+  const rows = await listAttendingSubmitted(db);
+  const known = new Set(rows.map((r) => r.id));
+
+  const seen = new Set<string>();
+  for (const t of teams) {
+    for (const id of t.member_ids) {
+      if (!known.has(id)) return { ok: false, error: 'The teams referred to somebody who is not in this run.' };
+      if (seen.has(id)) return { ok: false, error: 'The teams put the same person on two teams.' };
+      seen.add(id);
+    }
+  }
+  if (teams.length === 0) {
+    return {
+      ok: false,
+      error: `No team could be formed with team sizes set to ${params.min_team_size}-${params.max_team_size}. Widen the bounds and start a new run.`,
+    };
+  }
+
+  const participants: SolverParticipant[] = rows.map(toSolverParticipant);
+  const evaluation = evaluateArrangement(
+    participants,
+    teams.map((t) => ({ index: t.index, theme_label: t.theme_label, member_ids: t.member_ids })),
+    params,
+    themeOf,
+  );
+
+  const parsed = parseThemes(run);
+  const warnings = [...parsed.warnings];
+  if (seen.size < rows.length) {
+    warnings.push(
+      `${rows.length - seen.size} of ${rows.length} people were left off every team. Check the Unassigned column on the review board.`,
+    );
+  }
+
+  await setRunProgress(db, runId, 'naming', `Naming ${teams.length} teams`);
+  const llm = createLlmClient(env, config);
+  const byId = new Map<string, ParticipantRow>(rows.map((r) => [r.id, r]));
+  const narrated = await narrateTeams(
+    llm,
+    teams.map((t) => ({
+      index: t.index,
+      theme_label: t.theme_label,
+      theme_summary: t.theme_summary,
+      members: t.member_ids.map((id) => {
+        const row = byId.get(id);
+        return {
+          display_name: firstNameOf(row?.name),
+          problem_statement: row?.problem_statement ?? null,
+        };
+      }),
+    })),
+  );
+  warnings.push(...narrated.warnings);
+
+  await saveRunResult(
+    db,
+    runId,
+    teams,
+    narrated.narratives,
+    parsed.themes,
+    evaluation.score,
+    evaluation.violations,
+    warnings,
+    themeOf,
+  );
+  return { ok: true };
 }

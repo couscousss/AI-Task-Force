@@ -81,7 +81,7 @@ ok "migrations applied"
 # ---------------------------------------------------------------- 4. deploy
 say "4/5  Deploy"
 DEPLOY_LOG="$(mktemp)"
-npx wrangler deploy 2>&1 | tee "$DEPLOY_LOG"
+npm run deploy 2>&1 | tee "$DEPLOY_LOG"
 URL="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' "$DEPLOY_LOG" | head -1 || true)"
 rm -f "$DEPLOY_LOG"
 ok "deployed"
@@ -96,7 +96,7 @@ fs.writeFileSync(file, fs.readFileSync(file, 'utf8')
   .replace('"PUBLIC_ORIGIN": "http://localhost:8787"', `"PUBLIC_ORIGIN": "${url}"`));
 NODE
   warn "PUBLIC_ORIGIN set to $URL — re-deploying so links point at the right place"
-  npx wrangler deploy >/dev/null
+  npm run deploy >/dev/null
   ok "re-deployed"
 fi
 

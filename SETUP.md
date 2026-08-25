@@ -35,9 +35,12 @@ writes its id into `wrangler.jsonc`, applies the schema, deploys, and points
 `PUBLIC_ORIGIN` at the URL it just got. It is safe to run again if anything fails
 part-way.
 
-You need a Cloudflare account on the **Workers Paid plan**. This is not optional: the
-solver uses about 133ms of CPU for 150 participants, and the free tier cuts every
-request off at 10ms.
+**The free Cloudflare plan is enough.** A Worker on the free plan is cut off at 10ms of
+CPU per request, and balancing teams needs 12ms for 40 people and 61ms for 150 — so that
+one step runs in the organizer's browser instead. It is the same code with the same
+seed, so the teams are identical; measured side by side, the score matches to six
+decimal places. The only thing this asks of you is to keep the tab open for the few
+seconds it takes, and to have JavaScript on in that browser.
 
 At the end it prints your URL.
 
