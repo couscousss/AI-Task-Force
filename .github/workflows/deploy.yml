@@ -16,6 +16,14 @@ name: Deploy
 # After that, every run redeploys. The URL is printed in the summary at the end.
 
 on:
+  # Every push to the working branch deploys itself, so a change is live a couple of
+  # minutes after it is made without anyone pressing anything. The typecheck and the
+  # solver tests run first, so a broken push stops before it reaches the Worker.
+  push:
+    branches:
+      - claude/web-application-k0lv8g
+  # Still available by hand — for redeploying after changing a secret or a var in the
+  # Cloudflare dashboard, where nothing has been pushed.
   workflow_dispatch:
 
 # Two deploys at once would race on the database id, so let one finish first.

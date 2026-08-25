@@ -20,7 +20,13 @@ One-time setup, all point-and-click:
 3. **Actions** tab → **Deploy** → **Run workflow**.
 
 It creates the database, applies the schema, deploys, and prints your URL in the run
-summary. Every later run redeploys. You never open a terminal.
+summary. You never open a terminal.
+
+After that first run it is automatic: **every push to the working branch deploys itself**,
+so a change is live a couple of minutes after it is made. The typecheck and the solver
+tests run first, so a broken push stops before it reaches the Worker. The Run workflow
+button stays available for when you change a secret or a var in the Cloudflare dashboard
+and need a redeploy without a code change.
 
 ### Option B — from your own machine
 
