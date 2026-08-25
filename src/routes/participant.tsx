@@ -319,7 +319,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
           {/* 1. Name */}
           <div class={fieldClass(errors['name'])}>
             <label for="name">
-              Your name <span class="req" aria-hidden="true">*</span>
+              Your Name <span class="req" aria-hidden="true">*</span>
             </label>
             <input
               type="text"
@@ -377,7 +377,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
           {/* 3. Email — stays visible even for a decline: it is how we know who you are. */}
           <div class={fieldClass(errors['email'])}>
             <label for="email">
-              Your email <span class="req" aria-hidden="true">*</span>
+              Your Email <span class="req" aria-hidden="true">*</span>
             </label>
             <input
               type="email"
