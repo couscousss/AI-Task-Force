@@ -9,7 +9,7 @@
 // renamed.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "secc-builder-day-admin",
+  "name": "builderday-admin",
   "main": "src/admin.tsx",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -45,7 +45,10 @@
     // Left empty on purpose: links are built from the request origin, so a fresh
     // deploy is correct with no configuration. Set it only if you send email, since the
     // reminder cron has no request to read an origin from.
-    "PUBLIC_ORIGIN": "https://secc-builder-day.marcusfoo-work.workers.dev",
+    // Overwritten by the deploy with the public Worker's real URL, so it stays correct
+    // across a rename or an account-subdomain change. This value is only the fallback for
+    // a deploy done by hand.
+    "PUBLIC_ORIGIN": "https://builderday.marcusfoo-work.workers.dev",
     "FROM_EMAIL": "AI Builder Day <builderday@example.org>",
     "MAX_REMINDERS": "2",
     "EXPECTED_PARTICIPANTS": "80",

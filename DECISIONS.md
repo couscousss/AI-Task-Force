@@ -391,8 +391,8 @@ neither yours nor path-scopable. Cloudflare's Worker-level Access covers `worker
 but it protects the whole Worker — which would put the participant form behind a company
 login too.
 
-So the app deploys as two Workers over one D1 database: `secc-builder-day` (the form and
-the published team list, open to everyone) and `secc-builder-day-admin` (every organizer
+So the app deploys as two Workers over one D1 database: `builderday` (the form and
+the published team list, open to everyone) and `builderday-admin` (every organizer
 screen, entirely behind Access). The spec's actual requirement — Cloudflare does the
 authentication, this codebase contains none — is preserved; only the deployment shape
 changed.

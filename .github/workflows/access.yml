@@ -72,7 +72,9 @@ jobs:
             cat access.log 2>/dev/null || echo "The step above did not get far enough to log anything."
             echo '```'
             echo
-            echo "Dashboard: https://secc-builder-day-admin.marcusfoo-work.workers.dev"
+            echo "The dashboard is the **builderday-admin** Worker. Its URL is printed at the"
+            echo "end of the Deploy workflow, and is <name>.<your account>.workers.dev —"
+            echo "not hardcoded here, because renaming either half would make it stale."
             echo
             echo "The participant form is a separate Worker and is not affected — it stays open."
           } >> "$GITHUB_STEP_SUMMARY"

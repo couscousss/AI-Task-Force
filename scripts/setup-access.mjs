@@ -27,7 +27,7 @@ const API = 'https://api.cloudflare.com/client/v4';
 
 const TOKEN = process.env['CLOUDFLARE_API_TOKEN'];
 const ACCOUNT = process.env['CLOUDFLARE_ACCOUNT_ID'];
-const WORKER_NAME = process.env['ADMIN_WORKER_NAME'] ?? 'secc-builder-day-admin';
+const WORKER_NAME = process.env['ADMIN_WORKER_NAME'] ?? 'builderday-admin';
 const APP_NAME = 'SECC Builder Day — organizer dashboard';
 const POLICY_NAME = 'Organizers';
 // Only used if the account has no Zero Trust organization yet. Must be globally unique

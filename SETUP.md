@@ -91,8 +91,8 @@ This deploys **two Workers**:
 
 | Worker | What it serves | Who can reach it |
 |---|---|---|
-| `secc-builder-day` | the form and the published team list | everyone — this is the link you share |
-| `secc-builder-day-admin` | every organizer screen | only you, once Access is on |
+| `builderday` | the form and the published team list | everyone — this is the link you share |
+| `builderday-admin` | every organizer screen | only you, once Access is on |
 
 They are separate for one reason. Cloudflare Access attaches to a Worker or to a domain
 you own; a `workers.dev` URL is neither, so it cannot be protected by path. Protecting
@@ -158,6 +158,39 @@ Open `wrangler.jsonc` and set these, then run `npm run deploy`:
 
 Share `https://your-worker.workers.dev` with the department. It goes straight to the
 form. The same link is shown at the top of `/admin` so you can copy it from there.
+
+### Making that link look right
+
+The address is assembled from three parts:
+
+```
+builderday  .  your-account  .  workers.dev
+└ Worker ──┘   └ account ───┘   └ Cloudflare's ┘
+  wrangler.jsonc  dashboard,      fixed unless you
+  "name"          once only       own a domain
+```
+
+The **Worker name** is the `name` field in `wrangler.jsonc` (and `wrangler.admin.jsonc`),
+changeable any time — push, and the deploy picks it up.
+
+The **account subdomain** is set in the Cloudflare dashboard under *Workers & Pages* →
+**Change** next to *Your subdomain*. In practice you get **one** change: a second attempt
+usually returns "Account already has an associated subdomain". Pick the one you want to
+keep, and remember it appears in a link your whole department will see.
+
+Two things to know after either rename:
+
+- **The old Worker keeps running.** Renaming deploys a new one and leaves the previous
+  one serving the old code at the old address. It writes to the same database, so
+  nothing is lost or duplicated — but delete it from the dashboard so there is only one
+  live link.
+- **Access is attached to a Worker, not a hostname.** Changing the account subdomain
+  keeps it; renaming the *Worker* creates a new one that Access does not cover, so re-run
+  the **Protect the admin dashboard** workflow afterwards. Until you do, the new admin
+  Worker refuses every request rather than opening up — it fails shut.
+
+To drop `.workers.dev` entirely you need a domain of your own. That is also what would
+let Access be scoped to `/admin` on a single Worker, collapsing these two back into one.
 
 **Optional:** if you also want to track who has *not* replied, upload an invite list at
 `/admin/invites` — a CSV with a name column and an email column, in either order, with or

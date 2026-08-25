@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "secc-builder-day",
+  // The public hostname is <name>.<account subdomain>.workers.dev, so this is the half of
+  // the shared link that is set here. The account subdomain is dashboard-only.
+  "name": "builderday",
   "main": "src/index.tsx",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
