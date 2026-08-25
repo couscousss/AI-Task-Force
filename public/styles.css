@@ -1,15 +1,23 @@
-/* SECC AI Builder Day — one stylesheet, one accent, no framework.
+/* SECC AI Builder Day — one stylesheet, no framework.
    Mobile-first. Sized to be legible on a 360px phone and on a projector at the back
-   of a room. Calm and considered rather than impressive: no gradient hero, no animated
-   background, nothing that reads as a dashboard template. */
+   of a room.
+
+   A sea-green accent with a warm ember second, and a gradient hero on the participant
+   form so the first thing a colleague sees has some life in it. The admin screens stay
+   quiet: they are worked in, not looked at. */
 
 :root {
   /* Single accent. A deep sea-green that stays legible on paper and on a projector. */
-  --accent: #0e5a5f;
-  --accent-hover: #0a4a4e;
+  --accent: #0b6b70;
+  --accent-hover: #085156;
   --accent-ink: #ffffff;
-  --accent-soft: #e2efee;
-  --accent-line: #9cc7c6;
+  --accent-soft: #ddf0ee;
+  --accent-line: #8fc9c6;
+  --spark: #d9622b;
+  --spark-soft: #fdeade;
+  --hero-a: #0b6b70;
+  --hero-b: #d9622b;
+  --hero-line: rgb(255 255 255 / 55%);
 
   /* Neutrals biased warm, so the page reads as paper rather than as a system dialog. */
   --bg: #f7f5f1;
@@ -43,11 +51,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --accent: #7ccace;
-    --accent-hover: #96d8db;
+    --accent: #7fd2d6;
+    --accent-hover: #9adfe2;
     --accent-ink: #05282b;
     --accent-soft: #10302f;
     --accent-line: #2f5f60;
+    --spark: #f08a52;
+    --spark-soft: #38200f;
+    --hero-a: #0d4f54;
+    --hero-b: #a5481f;
+    --hero-line: rgb(255 255 255 / 40%);
 
     --bg: #111413;
     --surface: #191d1c;
@@ -127,6 +140,52 @@ a:hover { text-decoration-thickness: 2px; }
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+
+
+/* ---------- hero ---------- */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--hero-a) 0%, var(--hero-b) 140%);
+  color: #fff;
+  padding: 2.25rem 1.25rem 2rem;
+}
+@media (min-width: 30rem) { .hero { padding: 3rem 1.75rem 2.5rem; } }
+.hero > * { position: relative; z-index: 1; }
+.hero-text { max-width: var(--measure); margin: 0 auto; }
+.hero h1 {
+  margin: 0.15rem 0 0.35rem;
+  color: #fff;
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  letter-spacing: -0.02em;
+}
+.hero-eyebrow {
+  margin: 0; font-family: var(--font); font-size: 0.74rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: rgb(255 255 255 / 78%);
+}
+.hero-lede { margin: 0; color: rgb(255 255 255 / 92%); font-size: 1.05rem; max-width: 44ch; }
+.hero-meta { margin: 1rem 0 0; display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; }
+.hero-pill {
+  background: rgb(255 255 255 / 18%); border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 99px; padding: 0.2rem 0.7rem; font-size: 0.84rem; font-weight: 620;
+  white-space: nowrap;
+}
+.hero-note { font-size: 0.86rem; color: rgb(255 255 255 / 80%); }
+
+/* Decorative only, and it never steals space from the words. */
+.hero-art {
+  position: absolute; inset: 0 auto 0 auto; right: -3.5rem; top: 50%;
+  transform: translateY(-50%); width: 13rem; opacity: 0.14; pointer-events: none;
+}
+.hero-art svg { width: 100%; height: auto; display: block; }
+/* Only once there is room beside the words does it come forward; on a phone it sits
+   behind them, so it stays faint enough not to compete with the text. */
+@media (min-width: 40rem) { .hero-art { right: -1rem; width: 16rem; opacity: 0.3; } }
+@media (min-width: 58rem) { .hero-art { right: 5%; width: 19rem; opacity: 0.45; } }
+
+/* The hero already carries the page title, so the form starts closer to it. */
+.hero + .narrow { padding-top: 1.75rem; }
 
 /* ---------- layout ---------- */
 

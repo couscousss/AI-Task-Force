@@ -157,7 +157,7 @@ export interface EventConfig {
 
 export const EVENT_DEFAULTS: EventConfig = {
   eventName: 'SECC AI Builder Day',
-  eventDate: '2026-09-18',
+  eventDate: '2026-09-22',
   formOpens: '2026-08-01T09:00:00+08:00',
   formDeadline: '2026-09-15T17:00:00+08:00',
   localUtcOffsetHours: 8,

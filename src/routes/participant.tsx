@@ -60,7 +60,7 @@ const FIELD_META: Record<string, FieldMeta> = {
   name: { label: 'Your name', anchor: 'name' },
   attending: { label: 'Are you attending?', anchor: 'field-attending' },
   email: { label: 'Your email', anchor: 'email' },
-  department: { label: 'Department or team', anchor: 'department' },
+  department: { label: 'Cluster', anchor: 'department' },
   problem_statement: { label: 'The work challenge', anchor: 'problem_statement' },
   category: { label: 'What you want to explore', anchor: 'category' },
   skill_understanding: { label: 'AI Understanding', anchor: 'field-skill-understanding' },
@@ -72,14 +72,11 @@ const FIELD_META: Record<string, FieldMeta> = {
   turnstile: { label: 'The check that you are a person', anchor: 'field-turnstile' },
 };
 
+// ATTENDING.unsure is deliberately absent: the form offers yes or no only. The value is
+// still understood everywhere else so that any row already carrying it keeps rendering.
 const ATTENDING_OPTIONS: { value: string; label: string; desc?: string }[] = [
   { value: String(ATTENDING.yes), label: "Yes, I'll be there" },
   { value: String(ATTENDING.no), label: "No, I can't make it" },
-  {
-    value: String(ATTENDING.unsure),
-    label: 'Not sure yet',
-    desc: 'Fill in the rest anyway — it keeps your place while you find out.',
-  },
 ];
 
 /** 'notyet' and 'closed' both render the form read-only; only 'open' accepts a POST. */
@@ -239,13 +236,47 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
       head={head}
       scripts={readOnly ? undefined : ['/form.js']}
     >
+      <header class="hero">
+        <div class="hero-art" aria-hidden="true">
+          <svg viewBox="0 0 240 160" role="presentation" focusable="false">
+            <defs>
+              <linearGradient id="hg" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="var(--hero-a)" />
+                <stop offset="100%" stop-color="var(--hero-b)" />
+              </linearGradient>
+            </defs>
+            {/* Four people, four sizes: the mix of experience a team is built from. */}
+            <circle cx="52" cy="58" r="26" fill="url(#hg)" opacity="0.9" />
+            <circle cx="112" cy="42" r="16" fill="url(#hg)" opacity="0.65" />
+            <circle cx="160" cy="74" r="30" fill="url(#hg)" opacity="0.8" />
+            <circle cx="96" cy="104" r="21" fill="url(#hg)" opacity="0.5" />
+            <path
+              d="M52 58 L112 42 M112 42 L160 74 M160 74 L96 104 M96 104 L52 58"
+              stroke="var(--hero-line)"
+              stroke-width="2.5"
+              fill="none"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+        <div class="hero-text">
+          <p class="hero-eyebrow">{eventDay}</p>
+          <h1>{cfg.eventName}</h1>
+          <p class="hero-lede">
+            {phase === 'open'
+              ? 'Tell us whether you can make it and what you would like to build. Three minutes.'
+              : 'Your check-in form.'}
+          </p>
+          {phase === 'open' ? (
+            <p class="hero-meta">
+              <span class="hero-pill">Closes {deadline}</span>
+              <span class="hero-note">You can come back and change anything until then.</span>
+            </p>
+          ) : null}
+        </div>
+      </header>
+
       <main class="narrow" id="main">
-        <h1>{cfg.eventName}</h1>
-        <p class="lede">
-          {phase === 'open'
-            ? `${eventDay}. Tell us whether you can make it and what you would like to build. Three minutes, and you can come back to this link and change anything until ${deadline}.`
-            : `${eventDay}. This is your personal check-in form.`}
-        </p>
 
         {phase === 'notyet' ? (
           <Callout tone="info" title="Not open yet">
@@ -373,10 +404,13 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             {/* 4. Department */}
             <div class={fieldClass(errors['department'])}>
               <label for="department">
-                Department or team <span class="optional">optional</span>
+                Cluster{' '}
+                <span class="req" aria-hidden="true">
+                  *
+                </span>
               </label>
               <p class="hint" id="department-hint">
-                We use it to mix people from different parts of the organisation.
+                We use it to mix people from different clusters across a team.
               </p>
               <input
                 type="text"
@@ -398,7 +432,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             {/* 5. Problem statement */}
             <div class={fieldClass(errors['problem_statement'])}>
               <label for="problem_statement">
-                What work challenge or process would you like to improve or explore using AI?{' '}
+                What are some work challenges or processes you would like to improve or explore using AI?{' '}
                 <span class="req" aria-hidden="true">*</span>
               </label>
               <p class="hint" id="problem-hint">
@@ -406,23 +440,6 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
                 or error-prone today. This is what we build the teams around, so it is the answer that
                 matters most.
               </p>
-              <details class="examples">
-                <summary>See examples</summary>
-                <ul>
-                  <li>
-                    Every month I copy figures out of four spreadsheets into the ops report by hand. It
-                    takes most of a day and I still miss things.
-                  </li>
-                  <li>
-                    New starters ask the same thirty questions and we answer each one from scratch. I would
-                    like something that answers them from our handbook.
-                  </li>
-                  <li>
-                    Supplier contracts arrive as PDFs and someone has to read each one to find the renewal
-                    date and notice period.
-                  </li>
-                </ul>
-              </details>
               <textarea
                 id="problem_statement"
                 name="problem_statement"
@@ -475,15 +492,6 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
 
             {/* 7. Capability */}
             <h2>Your AI capability today</h2>
-            <Callout tone="info" title="Who sees this">
-              <p>
-                The organizers are the only people who read these answers, and we use them for one thing:
-                putting a mix of experience on every team. It is not a performance assessment, it does not
-                go to your manager, and no one is ranked. Rate yourself as you actually are — an accurate
-                1 is far more useful to us than a hopeful 4.
-              </p>
-            </Callout>
-
             {/* The 1-5 scale, stated once, in full, and always on the page. Each option
                 below still carries its name, so a level is identifiable without scrolling
                 back up here. */}
@@ -583,7 +591,6 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
                   />
                   <span>
                     <span class="choice-label">No</span>
-                    <span class="choice-desc">Fine — we will put you with people who can.</span>
                   </span>
                 </label>
               </div>
@@ -597,7 +604,8 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             {/* 9. Hopes */}
             <div class={fieldClass(errors['hopes'])}>
               <label for="hopes">
-                What do you hope to walk away with? <span class="optional">optional</span>
+                What do you hope to accomplish during the Builders' Day?{' '}
+                <span class="optional">optional</span>
               </label>
               <textarea
                 id="hopes"
@@ -650,7 +658,7 @@ function AnswersTable({ row }: { row: ParticipantRow }) {
     { label: 'Email', value: row.email },
   ];
   if (row.attending !== ATTENDING.no) {
-    rows.push({ label: 'Department or team', value: (row.department ?? '').trim() || 'Not given' });
+    rows.push({ label: 'Cluster', value: (row.department ?? '').trim() || 'Not given' });
     rows.push({ label: 'Work challenge', value: (row.problem_statement ?? '').trim() || 'Not given' });
     rows.push({ label: 'Wants to explore', value: categoryLabel(row.category) });
     for (const axis of SKILL_AXES) {
@@ -787,7 +795,11 @@ async function validateSubmission(
   }
 
   const department = squish(v.department);
-  if (department.length > 120) errors['department'] = 'That is too long — 120 characters or fewer.';
+  if (department.length > 120) {
+    errors['department'] = 'That is too long — 120 characters or fewer.';
+  } else if (department === '' && attending !== ATTENDING.no) {
+    errors['department'] = 'Add your cluster — it is what we use to mix people across teams.';
+  }
 
   // A decline is a complete answer. Everything below is optional in that case, and the
   // server is the authority: form.js only hides these fields, it never enforces anything.
