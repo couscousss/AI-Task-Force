@@ -491,6 +491,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   border-left: 3px solid var(--bad); border-radius: 5px; padding: 0.35rem 0.5rem;
 }
 .team-issues li::before { content: "✕ "; font-weight: 700; }
+/* Informational notes inside a callout: same shape as .team-issues, but they are not
+   failures, so no red and no cross. */
+.notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; }
+.notes li { font-size: 0.9rem; padding-left: 1rem; position: relative; }
+.notes li::before { content: "·"; position: absolute; left: 0.25rem; font-weight: 700; }
+
 .team-ok { font-size: 0.84rem; color: var(--good); font-weight: 600; }
 .team-ok::before { content: "✓ "; font-weight: 700; }
 

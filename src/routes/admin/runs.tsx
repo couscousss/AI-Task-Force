@@ -896,7 +896,9 @@ runRoutes.get('/:id', async (c) => {
 
           {warnings.length > 0 ? (
             <Callout tone="warn" title="Clustering fell back or was corrected">
-              <ul class="team-issues">
+              {/* Notes, not failures — the run succeeded. `.team-issues` marks each item
+                  with a red cross, which reads as something having gone wrong. */}
+              <ul class="notes">
                 {warnings.map((w) => (
                   <li>{w}</li>
                 ))}
