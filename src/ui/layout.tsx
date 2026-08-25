@@ -40,6 +40,13 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = ({
       </head>
       <body class={bodyClass}>
         {children}
+        {/* Every page, including the projected team list. Kept out of print, where the
+            page is a handout rather than a screen. */}
+        <footer class="colophon no-print">
+          <p>
+            Built by the SECC AI Task Force &amp; Claude <span aria-hidden="true">:)</span>
+          </p>
+        </footer>
         {(scripts ?? []).map((src) => (
           <script src={src} defer></script>
         ))}

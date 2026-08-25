@@ -620,3 +620,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------- colophon */
+/* Signature line at the foot of every page. Quiet enough that it never competes
+   with the form, but present on the projector too — the team who built it should
+   be on the screen the room is looking at. */
+.colophon {
+  margin-top: 3rem;
+  padding: 1.5rem 1rem 2rem;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.colophon p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-3);
+  letter-spacing: 0.01em;
+}
+
+/* The admin shell already pads its own content; without this the line would sit
+   hard against the viewport edge on a narrow window. */
+body.admin .colophon {
+  margin-top: 2.5rem;
+}
