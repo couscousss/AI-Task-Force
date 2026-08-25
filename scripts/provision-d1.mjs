@@ -23,11 +23,22 @@ function wrangler(args) {
   });
 }
 
+/** Whatever wrangler actually said, so a failure is diagnosable from the log alone. */
+function explain(err) {
+  const parts = [err?.stderr, err?.stdout, err?.message]
+    .filter((s) => typeof s === 'string' && s.trim() !== '')
+    .map((s) => s.trim());
+  return parts.length > 0 ? parts.join('\n') : String(err);
+}
+
+let lastError = null;
+
 function findDatabase() {
   let raw;
   try {
     raw = wrangler(['d1', 'list', '--json']);
-  } catch {
+  } catch (err) {
+    lastError = explain(err);
     return null;
   }
   // Wrangler prints banners around the JSON, so take the first array in the output.
@@ -51,14 +62,23 @@ if (id) {
   try {
     wrangler(['d1', 'create', DB_NAME]);
   } catch (err) {
-    // A concurrent run may have created it between our list and our create.
-    console.log('Create reported a problem; checking whether it exists anyway.');
+    // A concurrent run may have created it between our list and our create, so this is
+    // not fatal on its own — but keep what wrangler said in case it turns out to be.
+    lastError = explain(err);
+    console.log('Create did not succeed; checking whether the database exists anyway.');
   }
   id = findDatabase();
   if (!id) {
+    console.error(`\nCould not create or find the D1 database "${DB_NAME}".`);
+    if (lastError) {
+      console.error('\nWhat wrangler said:\n');
+      console.error(lastError.replace(/^/gm, '  '));
+    }
     console.error(
-      `\nCould not create or find the D1 database "${DB_NAME}".\n` +
-        'If this is CI, check that CLOUDFLARE_API_TOKEN has the "D1: Edit" permission.\n',
+      '\nUsual causes:\n' +
+        '  · CLOUDFLARE_API_TOKEN is missing the "D1: Edit" permission\n' +
+        '  · CLOUDFLARE_ACCOUNT_ID is wrong, or belongs to a different account than the token\n' +
+        '  · the token was revoked or has expired\n',
     );
     process.exit(1);
   }

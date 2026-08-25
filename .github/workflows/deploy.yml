@@ -46,7 +46,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Wrangler 4 requires Node >= 22. On 20 it installs with an EBADENGINE
+          # warning and then fails at runtime, which is easy to miss in the log.
+          node-version: 22
           cache: npm
 
       - run: npm ci

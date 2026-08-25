@@ -28,7 +28,8 @@ die()  { printf '\n\033[31m✕ %s\033[0m\n' "$*" >&2; exit 1; }
 # ---------------------------------------------------------------- 1. prerequisites
 say "1/5  Checking prerequisites"
 
-# Wrangler 4 needs Node 20 or newer.
+# Wrangler 4 declares node >=22. On 20 it installs with only an EBADENGINE warning and
+# then fails at runtime, so check for 22 rather than letting it get that far.
 command -v node >/dev/null || die "Node is not installed.
 
   On a Mac, either:
@@ -37,7 +38,7 @@ command -v node >/dev/null || die "Node is not installed.
 
   Then open a NEW terminal window and run this script again."
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 20 ] || die "Node $NODE_MAJOR is too old — Wrangler needs 20 or newer.
+[ "$NODE_MAJOR" -ge 22 ] || die "Node $NODE_MAJOR is too old — Wrangler needs 22 or newer.
 
   brew upgrade node    or    https://nodejs.org -> download the LTS installer
 
