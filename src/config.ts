@@ -51,16 +51,33 @@ export const CATEGORIES: { value: string; label: string }[] = [
   { value: 'automate', label: 'Automating a manual process' },
   { value: 'search', label: 'Searching or summarizing documents' },
   { value: 'analysis', label: 'Data analysis and reporting' },
-  { value: 'product', label: 'A user-facing tool' },
   { value: 'content', label: 'Content and drafting' },
   { value: 'unsure', label: 'Not sure yet' },
 ];
+
+/**
+ * Options that were offered once and are not any more.
+ *
+ * Withdrawing an option from the form does not withdraw it from the rows already saved
+ * against it. `categoryLabel` falls back to the raw stored value, so dropping a value from
+ * CATEGORIES alone would print `product` into the CSV export, the participants table, the
+ * dashboard breakdown and the clustering prompt. Keeping the label here means an answer
+ * given before the change still reads as a sentence.
+ *
+ * Not part of CATEGORY_VALUES, so a new submission carrying one is still rejected, and the
+ * form no longer offers it.
+ */
+const RETIRED_CATEGORIES: Record<string, string> = {
+  product: 'A user-facing tool',
+};
 
 export const CATEGORY_VALUES = CATEGORIES.map((c) => c.value);
 
 export function categoryLabel(value: string | null | undefined): string {
   if (!value) return 'Not specified';
-  return CATEGORIES.find((c) => c.value === value)?.label ?? value;
+  const live = CATEGORIES.find((c) => c.value === value);
+  if (live) return live.label;
+  return RETIRED_CATEGORIES[value] ?? value;
 }
 
 export const ATTENDING = {
