@@ -4,16 +4,40 @@
 
 Deploy once, then send your department **one link**. That is the whole flow.
 
+There are two ways to deploy. Pick one.
+
+### Option A — from the browser, nothing installed (easiest)
+
+One-time setup, all point-and-click:
+
+1. **Cloudflare** → *My Profile* → *API Tokens* → *Create Token* → use the
+   **Edit Cloudflare Workers** template, and add the **D1: Edit** permission as well.
+   Copy the token.
+2. **This repo on GitHub** → *Settings* → *Secrets and variables* → *Actions* →
+   *New repository secret*. Add two:
+   - `CLOUDFLARE_API_TOKEN` — the token you just copied
+   - `CLOUDFLARE_ACCOUNT_ID` — the Account ID in your Cloudflare dashboard sidebar
+3. **Actions** tab → **Deploy** → **Run workflow**.
+
+It creates the database, applies the schema, deploys, and prints your URL in the run
+summary. Every later run redeploys. You never open a terminal.
+
+### Option B — from your own machine
+
+Needs Node 20+ installed (`brew install node`, or the LTS installer from nodejs.org —
+then open a **new** terminal window).
+
 ```bash
 git clone https://github.com/couscousss/AI-Task-Force.git
 cd AI-Task-Force && git checkout claude/web-application-k0lv8g
 ./scripts/setup.sh
 ```
 
-The script prints your URL. Share that URL. Anyone who opens it fills the form in —
-no invite list, no personal links, no email needed.
+Both routes run the same provisioning script, so they produce the same result.
 
-The rest of this file is detail you can read while it runs.
+Share the URL it prints. Anyone who opens it fills the form in — no invite list, no
+personal links, no email needed. The rest of this file is detail you can read while it
+runs.
 
 ---
 
@@ -34,19 +58,15 @@ step here with a delay outside your control — so leave it until last, or skip 
 
 ---
 
-## Step 1 — Deploy (about 10 minutes)
+## Step 1 — Deploy
 
-```bash
-git clone https://github.com/couscousss/AI-Task-Force.git
-cd AI-Task-Force
-git checkout claude/web-application-k0lv8g
-./scripts/setup.sh
-```
+Whichever option you picked above. Both create the database, apply the schema and deploy,
+and both are safe to run again if anything fails part-way.
 
-The script logs you into Cloudflare (a browser window opens), creates the D1 database,
-writes its id into `wrangler.jsonc`, applies the schema, deploys, and points
-`PUBLIC_ORIGIN` at the URL it just got. It is safe to run again if anything fails
-part-way.
+You do not need to set a public URL anywhere: every link the app shows is built from the
+address the page was opened on, so a fresh deploy hands out correct links with no
+configuration. (`PUBLIC_ORIGIN` only matters if you send email, because the reminder cron
+has no request to read an address from.)
 
 **The free Cloudflare plan is enough.** A Worker on the free plan is cut off at 10ms of
 CPU per request, and balancing teams needs 12ms for 40 people and 61ms for 150 — so that

@@ -144,6 +144,8 @@ export interface EventConfig {
   organizerEmails: string[];
   /** Public origin, used to build participant links in emails. Overridable: PUBLIC_ORIGIN */
   publicOrigin: string;
+  /** True when PUBLIC_ORIGIN was actually set, rather than falling back to the default. */
+  publicOriginConfigured: boolean;
   fromEmail: string;
   maxReminders: number;
   expectedParticipants: number;
@@ -162,6 +164,7 @@ export const EVENT_DEFAULTS: EventConfig = {
   reminderLocalHour: 9,
   organizerEmails: [],
   publicOrigin: 'http://localhost:8787',
+  publicOriginConfigured: false,
   fromEmail: 'AI Builder Day <builderday@example.org>',
   maxReminders: 2,
   expectedParticipants: 80,
@@ -203,6 +206,7 @@ export function loadConfig(env: Env): EventConfig {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     publicOrigin: str(env.PUBLIC_ORIGIN, d.publicOrigin).replace(/\/+$/, ''),
+    publicOriginConfigured: typeof env.PUBLIC_ORIGIN === 'string' && env.PUBLIC_ORIGIN.trim() !== '',
     fromEmail: str(env.FROM_EMAIL, d.fromEmail),
     maxReminders: num(env.MAX_REMINDERS, d.maxReminders),
     expectedParticipants: num(env.EXPECTED_PARTICIPANTS, d.expectedParticipants),
@@ -211,4 +215,33 @@ export function loadConfig(env: Env): EventConfig {
     turnstileSiteKey: optStr(env.TURNSTILE_SITE_KEY, d.turnstileSiteKey),
     devAdminEmail: optStr(env.DEV_ADMIN_EMAIL, d.devAdminEmail),
   };
+}
+
+/**
+ * The origin to build participant links from.
+ *
+ * Uses PUBLIC_ORIGIN when it is set. Otherwise it takes the origin of the request being
+ * served, so a fresh deploy shows correct links with no configuration at all — the
+ * dashboard cannot end up handing out a localhost link to a whole department.
+ *
+ * The cron has no request to read, which is why the email screen still warns when
+ * PUBLIC_ORIGIN looks local: outbound mail is the one place this cannot be inferred.
+ */
+export function originFor(cfg: EventConfig, requestUrl: string): string {
+  if (cfg.publicOriginConfigured) return cfg.publicOrigin;
+  try {
+    return new URL(requestUrl).origin;
+  } catch {
+    return cfg.publicOrigin;
+  }
+}
+
+/**
+ * `loadConfig` with `publicOrigin` already resolved against the current request. Use this
+ * anywhere a link is shown to a human; the plain `loadConfig` is enough elsewhere.
+ */
+export function loadConfigFor(env: Env, requestUrl: string): EventConfig {
+  const cfg = loadConfig(env);
+  if (cfg.publicOriginConfigured) return cfg;
+  return { ...cfg, publicOrigin: originFor(cfg, requestUrl) };
 }

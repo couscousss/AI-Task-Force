@@ -343,3 +343,28 @@ answer.
 What is given up: with no invite list there is no denominator, so the dashboard can show
 how many people replied but not how many have not. Uploading a list is still offered, and
 is worth it when chasing non-responders matters.
+
+## Links are built from the request, not from configuration
+
+`PUBLIC_ORIGIN` used to default to `http://localhost:8787`, which meant a deploy that
+skipped that setting would show a localhost link on the dashboard — and the dashboard is
+where an organizer copies the link they send to their whole department. A setting that is
+load-bearing, easy to miss, and silently wrong is the wrong shape.
+
+Every link shown to a human is now derived from the origin of the request being served,
+via `loadConfigFor`. The var is empty by default and only needs setting for email, where
+the reminder cron has no request to read from — and the email screen already warns when it
+looks local. Verified by requesting the admin pages with a different Host header: both the
+share link and the personal links follow it.
+
+## Two deploy routes, one provisioning script
+
+The one-command `scripts/setup.sh` needs Node on the operator's machine, which is a real
+barrier for an organizer who does not otherwise use a terminal. A GitHub Actions workflow
+now does the same deploy from GitHub's machines: two secrets pasted into the repo settings
+in a browser, then a Run button.
+
+Both call `scripts/provision-d1.mjs` rather than each having their own copy of the
+find-or-create-then-patch logic, so the routes cannot drift. The CI run also typechecks
+and runs the solver tests before deploying, and the provisioning script exits non-zero on
+failure so a missing permission stops the deploy instead of shipping against no database.

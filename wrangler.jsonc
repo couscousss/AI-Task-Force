@@ -38,7 +38,10 @@
     "LOCAL_UTC_OFFSET_HOURS": "8",
     "REMINDER_LOCAL_HOUR": "9",
     "ORGANIZER_EMAILS": "",
-    "PUBLIC_ORIGIN": "http://localhost:8787",
+    // Left empty on purpose: links are built from the request origin, so a fresh
+    // deploy is correct with no configuration. Set it only if you send email, since the
+    // reminder cron has no request to read an origin from.
+    "PUBLIC_ORIGIN": "",
     "FROM_EMAIL": "AI Builder Day <builderday@example.org>",
     "MAX_REMINDERS": "2",
     "EXPECTED_PARTICIPANTS": "80",

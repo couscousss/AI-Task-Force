@@ -9,7 +9,7 @@ import {
   SKILL_AXIS_LABELS,
   SKILL_SCALE,
   categoryLabel,
-  loadConfig,
+  loadConfigFor,
 } from '../../config';
 import { formatLocalDate } from '../../lib/dates';
 
@@ -93,7 +93,7 @@ const LaptopVerdict: FC<{ stats: DashboardStats }> = ({ stats }) => {
 
 dashboardRoutes.get('/', async (c) => {
   const stats = await dashboardStats(c.env.DB);
-  const cfg = loadConfig(c.env);
+  const cfg = loadConfigFor(c.env, c.req.url);
   const email = c.get('adminEmail');
   const p = DEFAULT_SOLVER_PARAMS;
 
@@ -108,12 +108,20 @@ dashboardRoutes.get('/', async (c) => {
       >
         <Card>
           <EmptyState
-            title="Upload your invite list to get started"
-            body="Nothing is counted here until people are invited. Upload a CSV of names and emails and every number on this page starts filling in."
+            title="Send this link to your department"
+            body="Anyone who opens it fills in the form, and every number on this page starts filling in. Nothing else needs setting up first."
             action={
-              <a class="btn" href="/admin/invites">
-                Upload invite list
-              </a>
+              <>
+                <label class="visually-hidden" for="share-link-empty">
+                  Link to share with participants
+                </label>
+                <input id="share-link-empty" type="text" readonly value={`${cfg.publicOrigin}/join`} />
+                <p class="hint" style="margin-top:0.75rem">
+                  If you also want to see who has <em>not</em> replied,{' '}
+                  <a href="/admin/invites">upload an invite list</a> — that is the one thing an open
+                  link cannot tell you.
+                </p>
+              </>
             }
           />
         </Card>

@@ -18,7 +18,7 @@ import {
   SKILL_AXIS_LABELS,
   SKILL_SCALE,
   categoryLabel,
-  loadConfig,
+  loadConfigFor,
   type EventConfig,
   type SkillAxis,
 } from '../../config';
@@ -161,7 +161,7 @@ function truncate(text: string | null, max: number): string {
 }
 
 participantAdminRoutes.get('/', async (c) => {
-  const cfg = loadConfig(c.env);
+  const cfg = loadConfigFor(c.env, c.req.url);
   const email = c.get('adminEmail');
   const url = new URL(c.req.url);
   const f = readFilters(url);
@@ -402,7 +402,7 @@ function yesNo(v: number | null): string {
  * export at 8am on the day would silently lose people.
  */
 participantAdminRoutes.get('/export.csv', async (c) => {
-  const cfg = loadConfig(c.env);
+  const cfg = loadConfigFor(c.env, c.req.url);
   const rows = await listAll(c.env.DB);
   const headers = [
     'id',
@@ -873,7 +873,7 @@ participantAdminRoutes.get('/:id', async (c) => {
   return c.html(
     <DetailPage
       email={c.get('adminEmail')}
-      cfg={loadConfig(c.env)}
+      cfg={loadConfigFor(c.env, c.req.url)}
       row={row}
       v={valuesFromRow(row)}
       errors={{}}
@@ -908,7 +908,7 @@ participantAdminRoutes.post('/:id', async (c) => {
     return c.html(
       <DetailPage
         email={c.get('adminEmail')}
-        cfg={loadConfig(c.env)}
+        cfg={loadConfigFor(c.env, c.req.url)}
         row={row}
         v={v}
         errors={errors}
