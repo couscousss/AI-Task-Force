@@ -47,12 +47,66 @@ export const SKILL_SCALE: { value: 1 | 2 | 3 | 4 | 5; name: string; description:
  * [DECIDE] resolved: kept the spec's starter list verbatim, with stable machine keys so
  * that renaming a label later does not orphan data already collected. See DECISIONS.md.
  */
-export const CATEGORIES: { value: string; label: string }[] = [
-  { value: 'automate', label: 'Automating a manual process' },
-  { value: 'search', label: 'Searching or summarizing documents' },
-  { value: 'analysis', label: 'Data analysis and reporting' },
-  { value: 'content', label: 'Content and drafting' },
-  { value: 'unsure', label: 'Not sure yet' },
+/**
+ * The areas someone can pick for their work challenge.
+ *
+ * `value` is the machine key and is what lands in the database, so five of these keep the
+ * keys they were first shipped with even though their wording has moved on — an answer
+ * given on day one still resolves to the right area. Only genuinely new areas get new keys.
+ *
+ * `emoji` is decoration for the participant form only. It is deliberately not part of
+ * `label`, so the CSV export, the participants table and the clustering prompt stay plain
+ * text.
+ */
+export const CATEGORIES: { value: string; label: string; description: string; emoji: string }[] = [
+  {
+    value: 'automate',
+    emoji: '⚙️',
+    label: 'Automating repetitive tasks',
+    description: 'Reducing manual, repetitive work.',
+  },
+  {
+    value: 'workflows',
+    emoji: '🚀',
+    label: 'Streamlining workflows & processes',
+    description: 'Making the way work gets done simpler, faster, or more efficient.',
+  },
+  {
+    value: 'search',
+    emoji: '📄',
+    label: 'Finding, organizing & summarizing information',
+    description: 'Making it easier to search, understand, and manage information.',
+  },
+  {
+    value: 'analysis',
+    emoji: '📊',
+    label: 'Data analysis & reporting',
+    description: 'Using data to generate insights, summaries, or reports.',
+  },
+  {
+    value: 'comms',
+    emoji: '💬',
+    label: 'Communication & collaboration',
+    description: 'Improving communication, information sharing, and teamwork.',
+  },
+  {
+    value: 'content',
+    emoji: '💡',
+    label: 'Content & idea creation',
+    description: 'Creating, drafting, brainstorming, or developing new ideas.',
+  },
+  {
+    value: 'opportunity',
+    emoji: '🌱',
+    label: 'Exploring a new idea or opportunity',
+    description: 'Exploring a potential AI opportunity without a specific problem yet.',
+  },
+  {
+    value: 'unsure',
+    emoji: '🤔',
+    label: 'Not sure yet',
+    description: "That's completely okay — you can explore possibilities during the AI Builders' Day.",
+  },
 ];
 
 /**

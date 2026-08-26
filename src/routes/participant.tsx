@@ -63,7 +63,9 @@ const FIELD_META: Record<string, FieldMeta> = {
   email: { label: 'Your email', anchor: 'email' },
   department: { label: 'Cluster', anchor: 'department' },
   problem_statement: { label: 'The work challenge', anchor: 'problem_statement' },
-  category: { label: 'What you want to explore', anchor: 'category' },
+  // Anchors the fieldset, not an input: this is a radio group, so there is no single
+  // element called `category` to jump to.
+  category: { label: 'What you want to explore', anchor: 'field-category' },
   skill_understanding: { label: 'AI Understanding', anchor: 'field-skill-understanding' },
   skill_tools: { label: 'AI Tools', anchor: 'field-skill-tools' },
   skill_prompting: { label: 'Prompting', anchor: 'field-skill-prompting' },
@@ -467,33 +469,52 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             </div>
 
             {/* 6. Category */}
-            <div class={fieldClass(errors['category'])}>
-              <label for="category">
-                What would you like to explore or build? <span class="req" aria-hidden="true">*</span>
-              </label>
+            {/* A list rather than a dropdown: each area carries a line explaining it, and a
+                native <option> can only hold flat text. Same .choice markup as the attending
+                question, so it already reads and behaves correctly on a phone. */}
+            <fieldset
+              id="field-category"
+              class={errors['category'] ? 'field-invalid' : undefined}
+              aria-invalid={errors['category'] ? 'true' : undefined}
+              aria-describedby={describedBy('category-hint', errors['category'] && 'err-category')}
+            >
+              <legend class="fieldset-legend">
+                Which area best relates to the work challenge you would like to explore?{' '}
+                <span class="req" aria-hidden="true">
+                  *
+                </span>
+              </legend>
               <p class="hint" id="category-hint">
                 The closest fit is fine — "Not sure yet" is a real answer.
               </p>
-              <select
-                id="category"
-                name="category"
-                disabled={readOnly}
-                aria-invalid={errors['category'] ? 'true' : undefined}
-                aria-describedby={describedBy('category-hint', errors['category'] && 'err-category')}
-              >
-                <option value="">Choose one</option>
+              <div class="choices">
                 {CATEGORIES.map((c) => (
-                  <option value={c.value} selected={v.category === c.value}>
-                    {c.label}
-                  </option>
+                  <label class="choice">
+                    <input
+                      type="radio"
+                      name="category"
+                      value={c.value}
+                      checked={v.category === c.value}
+                      required
+                      disabled={readOnly}
+                    />
+                    <span>
+                      <span class="choice-label">
+                        {/* Decorative: a screen reader announcing "gear emoji" before every
+                            option is noise, and the label already says what the area is. */}
+                        <span aria-hidden="true">{c.emoji}</span> {c.label}
+                      </span>
+                      <span class="choice-desc">{c.description}</span>
+                    </span>
+                  </label>
                 ))}
-              </select>
+              </div>
               {errors['category'] ? (
                 <p class="error-text" id="err-category">
                   {errors['category']}
                 </p>
               ) : null}
-            </div>
+            </fieldset>
 
             {/* 7. Capability */}
             <h2>Your AI capability today</h2>
