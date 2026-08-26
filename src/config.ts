@@ -135,6 +135,31 @@ export function categoryLabel(value: string | null | undefined): string {
   return RETIRED_CATEGORIES[value] ?? value;
 }
 
+/**
+ * The clusters somebody can belong to.
+ *
+ * A fixed list rather than free text, because this value is compared for equality when the
+ * solver spreads people across clusters. Typed in by hand, "HQ", "hq" and "H.Q." are three
+ * different clusters as far as that scoring is concerned, and the mixing quietly stops
+ * working without anything looking wrong.
+ *
+ * The label is stored directly — there is no separate machine key, because these are the
+ * organisation's own names and are what an organizer wants to read in the CSV.
+ */
+export const CLUSTERS: string[] = [
+  'Air Ops C3',
+  'Embedded Teams / C3 CentEx',
+  'HQ',
+  'Maritime Ops',
+  'Smart Camps & Bases',
+  'WOG Ops C3',
+  'NSI',
+];
+
+export function isValidCluster(v: unknown): v is string {
+  return typeof v === 'string' && CLUSTERS.includes(v);
+}
+
 export const ATTENDING = {
   yes: 1,
   no: 0,

@@ -14,6 +14,7 @@ import {
 import {
   ATTENDING,
   CATEGORIES,
+  CLUSTERS,
   SKILL_AXES,
   SKILL_AXIS_LABELS,
   SKILL_SCALE,
@@ -566,14 +567,28 @@ const CoreFields: FC<{ v: EditValues; errors: Record<string, string>; idPrefix: 
       {errors.email ? <p class="error-text">{errors.email}</p> : null}
     </div>
     <div class="field">
-      <label for={`${idPrefix}-department`}>Department or team</label>
-      <input
-        type="text"
-        id={`${idPrefix}-department`}
-        name="department"
-        value={v.department}
-        autocomplete="off"
-      />
+      <label for={`${idPrefix}-department`}>Cluster</label>
+      {/* Same seven as the participant form. An organizer typing a cluster by hand would
+          reintroduce exactly the near-duplicates the fixed list exists to prevent — the
+          solver compares this value for equality when spreading people across clusters. */}
+      <select id={`${idPrefix}-department`} name="department">
+        <option value="" selected={v.department === ''}>
+          Not specified
+        </option>
+        {/* A walk-in added before the list existed, or a row edited when it was free text,
+            can hold something else. Shown so that editing an unrelated field does not
+            quietly discard it. */}
+        {v.department !== '' && !CLUSTERS.includes(v.department) ? (
+          <option value={v.department} selected>
+            {v.department} (not one of the clusters)
+          </option>
+        ) : null}
+        {CLUSTERS.map((cluster) => (
+          <option value={cluster} selected={v.department === cluster}>
+            {cluster}
+          </option>
+        ))}
+      </select>
     </div>
     <div class="field">
       <label for={`${idPrefix}-attending`}>Are they attending?</label>

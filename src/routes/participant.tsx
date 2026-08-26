@@ -3,10 +3,12 @@ import type { AppBindings } from '../env';
 import {
   ATTENDING,
   CATEGORIES,
+  CLUSTERS,
   SKILL_AXES,
   SKILL_AXIS_LABELS,
   SKILL_SCALE,
   categoryLabel,
+  isValidCluster,
   loadConfig,
   type EventConfig,
   type SkillAxis,
@@ -417,16 +419,25 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
                   *
                 </span>
               </label>
-              <input
-                type="text"
+              <select
                 id="department"
                 name="department"
-                value={v.department}
-                autocomplete="organization-title"
+                required
                 disabled={readOnly}
                 aria-invalid={errors['department'] ? 'true' : undefined}
                 aria-describedby={describedBy(errors['department'] && 'err-department')}
-              />
+              >
+                <option value="">Choose one</option>
+                {/* A row saved while this was free text can hold something not on the list.
+                    It is deliberately NOT offered back: the value is rejected on save, so
+                    offering it would be a trap. Nothing is lost silently — the field shows
+                    "Choose one" and validation refuses an empty answer. */}
+                {CLUSTERS.map((cluster) => (
+                  <option value={cluster} selected={v.department === cluster}>
+                    {cluster}
+                  </option>
+                ))}
+              </select>
               {errors['department'] ? (
                 <p class="error-text" id="err-department">
                   {errors['department']}
@@ -826,11 +837,16 @@ async function validateSubmission(
     }
   }
 
+  // Checked against the list rather than accepted as typed: the solver compares this value
+  // for equality when spreading people across clusters, so a value that is not one of the
+  // seven would be its own cluster of one and the mixing would degrade without anything
+  // looking wrong. The <select> makes the valid case the only easy one; this is the part
+  // that actually enforces it, since a form post can carry anything.
   const department = squish(v.department);
-  if (department.length > 120) {
-    errors['department'] = 'That is too long — 120 characters or fewer.';
-  } else if (department === '' && attending !== ATTENDING.no) {
-    errors['department'] = 'Add your cluster.';
+  if (department === '') {
+    if (attending !== ATTENDING.no) errors['department'] = 'Choose your cluster.';
+  } else if (!isValidCluster(department)) {
+    errors['department'] = 'Choose one of the clusters in the list.';
   }
 
   // A decline is a complete answer. Everything below is optional in that case, and the
