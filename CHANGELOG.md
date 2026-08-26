@@ -1,5 +1,59 @@
 # Versions
 
+## v3.0 — 26 August 2026
+
+**Cluster is a dropdown of the seven real clusters:** Air Ops C3, Embedded Teams / C3
+CentEx, HQ, Maritime Ops, Smart Camps & Bases, WOG Ops C3, NSI.
+
+Not only a nicer control. The solver compares this value for equality when it spreads
+people across clusters, so free text meant "HQ", "hq" and "H.Q." counted as three different
+clusters and the mixing degraded with nothing looking wrong. Enforced server-side as well as
+in the control, because a form post can carry anything.
+
+A value stored while the field was free text is not offered back on the participant form —
+it would be rejected on save, so offering it would be a trap. The admin screen does show it,
+marked "(not one of the clusters)", so editing an unrelated field cannot quietly discard a
+walk-in's entry.
+
+### Known defect at this version — not fixed
+
+An adversarial review of "what breaks when a hundred colleagues use this" ran against v2.0
+and found two paths where **one person's save silently and permanently destroys another
+person's answers**. Both were confirmed by reproduction, not just by reading:
+
+> Alice fills the form in — `Alice Tan | Finance | "month end close takes four days…"`
+> Bob, in a different browser with no cookie, submits with Alice's email address.
+> Alice's row becomes — `Bob Lim | Marketing | "we spend hours writing social posts…"`
+
+Alice's name, cluster and problem statement are gone. No warning to either of them, and
+nothing in the organizer dashboard shows it happened. `POST /join` calls `validateSubmission`
+with `current: null`, so the duplicate-email refusal never runs; `ensureInvite` returns the
+existing row and every column is overwritten, blanks included. The submitter is then handed
+that person's token in a 120-day cookie.
+
+The second path is the same damage from a shared browser: person B is redirected into person
+A's remembered record, types over it, and A's email column is rewritten — leaving no row for
+A at all while A's team seat shows B.
+
+Triggered by an ordinary typo, an autofill onto a real colleague's address, or somebody
+filling the form in on behalf of a colleague who already did. At a hundred people this is
+likely rather than exotic. **The link should not go out until both are fixed.**
+
+Also outstanding, lower stakes: `ORGANIZER_EMAILS` is empty, so every "Something wrong?
+Contact the organizers" line has no address behind it; several pages point at an email that
+cannot be sent while `RESEND_API_KEY` is unset; the broken-link 404 offers no way back to the
+form; and publishing teams has no unpublish route, though `unpublishAll` exists in the code.
+
+### So what "it works" means here
+
+Everything a participant does on the happy path works, and has been verified on a running
+Worker. The defect above is real, confirmed, and unfixed at this commit. v3.0 is a safe place
+to return to for the form's *content* — it is not a version to send to a department.
+
+```bash
+git checkout v3.0
+```
+
 ## v2.0 — 26 August 2026
 
 **Ready to send to the department.** v1.0 worked; this is v1.0 after a round of real use,
