@@ -1,18 +1,68 @@
 # Versions
 
-## Since v1.0
+## v2.0 — 26 August 2026
 
-**The shared link now remembers you.** Reported from real use: after saving, the page says
-the answers can be changed any time — but the link people keep is the one the organizer
-sent, and opening that again showed a blank form asking for a name and email from scratch.
-Nothing was ever lost, since email is the identity and re-submitting updates the same
-record, but retyping a problem statement in order to change one checkbox is a good reason
-to give up half way.
+**Ready to send to the department.** v1.0 worked; this is v1.0 after a round of real use,
+the organizer's own wording, and two defects that only appear at a hundred people.
+
+### The shared link remembers you
+
+Reported from real use, and the most important fix here. After saving, the page said the
+answers could be changed any time — but the link people keep is the one the organizer sent,
+and opening that again showed a blank form asking for a name and email from scratch. Nothing
+was ever lost, since email is the identity and re-submitting updates the same record, but
+retyping a problem statement in order to change one checkbox is a good reason to give up
+half way.
 
 Saving now drops the participant's own token in a cookie, and the shared link hands their
 answers back on the next visit from that device. A different phone or computer has no
-cookie, so the confirmation page also shows their personal link for that case, and the
-form carries a "Not you?" link that clears the cookie for a machine two people share.
+cookie, so the confirmation page also shows their personal link for that case, and the form
+carries a "Not you?" link that clears the cookie for a machine two people share.
+
+### Two things that only break at scale
+
+**A double-tapped Save returned a 500.** Looking the email up and inserting are two round
+trips, so two requests carrying the same address could both find nothing and both try to
+insert. `email` is UNIQUE, so the second lost — correctly — but the throw was unhandled and
+rendered "Something went wrong" over an answer that had saved perfectly well. One person on
+a slow phone tapping twice is not exotic at a hundred people. Proven fixed by firing six
+simultaneous submissions of the same new address: six successes, one row.
+
+**The form promised an email nobody could send.** The confirmation page said "We will email
+you your team and your project". Sending mail is an optional secret that is not configured,
+and even configured the organizer chooses when to send — so the app was promising something
+only a human could deliver, to everybody who filled the form in. It now says they will get
+their team and project before the day, without naming a channel.
+
+### The organizer's wording
+
+The eight areas replaced the starter list, as a dropdown carrying a short description each.
+Five of the eight kept the machine keys they shipped with, so answers given before the
+change still resolve to the right area; only `workflows`, `comms` and `opportunity` are new.
+"A user-facing tool" was withdrawn but stays label-resolvable, so an answer already saved
+against it still reads as a sentence rather than printing `product` into the CSV.
+
+Also: a welcome heading, plainer cluster and email fields, "Your Name" and "Your Email",
+the event named in the hopes question, and a colophon at the foot of every page.
+
+### Honestly, at the time of tagging
+
+A four-lens adversarial review of "what breaks when a hundred colleagues use this" was still
+running when this was marked. Ten findings had survived refutation and eight had been
+killed; none had been triaged yet. So v2.0 is "works, and everything found so far is fixed",
+not "reviewed clean". Anything that review turns up lands after this point.
+
+Still unexercised, as at v1.0: the live Anthropic clustering call, Resend delivery,
+Turnstile, and the cron firing. None is required for the event.
+
+### Getting back to this version
+
+Same as v1.0 — a branch called `v2.0` on GitHub holds the commit. Pushing tags is refused by
+this clone's credentials, so branches are the marker that survives.
+
+```bash
+git checkout v2.0
+```
 
 ## v1.0 — 25 August 2026
 
