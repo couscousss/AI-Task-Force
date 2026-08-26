@@ -396,8 +396,14 @@ legend { padding: 0; }
    mid-word. The legend directly above carries the wording, so narrow screens show the
    numbers alone -- the standard Likert pattern. The name stays in the accessibility
    tree either way, so the radio is never announced as a bare digit. */
+/* 0.66rem rather than 0.75rem because "Comfortable" is the longest of the five names and
+   was reaching past its cell in the narrow band where the names are still shown. The
+   wrapping rules are the guarantee rather than the size: at any width the word breaks
+   inside the box instead of spilling out of it, and min-height leaves room for the second
+   line. */
 .scale-cell-name {
-  color: var(--ink-2); font-size: 0.75rem; line-height: 1.2; max-width: 100%;
+  color: var(--ink-2); font-size: 0.66rem; line-height: 1.2; max-width: 100%;
+  overflow-wrap: anywhere; hyphens: auto;
 }
 @media (max-width: 25.999rem) {
   .scale-cell-name {
