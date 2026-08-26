@@ -44,11 +44,12 @@ export const SKILL_SCALE: { value: 1 | 2 | 3 | 4 | 5; name: string; description:
 ];
 
 /**
- * [DECIDE] resolved: kept the spec's starter list verbatim, with stable machine keys so
- * that renaming a label later does not orphan data already collected. See DECISIONS.md.
- */
-/**
  * The areas someone can pick for their work challenge.
+ *
+ * [DECIDE] resolved: the spec's starter list has since been replaced wholesale by the
+ * organizer's own eight areas. What survived from that decision is the part that mattered —
+ * stable machine keys, so rewording a label never orphans data already collected. See
+ * DECISIONS.md.
  *
  * `value` is the machine key and is what lands in the database, so five of these keep the
  * keys they were first shipped with even though their wording has moved on — an answer
@@ -63,49 +64,49 @@ export const CATEGORIES: { value: string; label: string; description: string; em
     value: 'automate',
     emoji: '⚙️',
     label: 'Automating repetitive tasks',
-    description: 'Reducing manual, repetitive work.',
+    description: 'Cut out manual steps.',
   },
   {
     value: 'workflows',
     emoji: '🚀',
     label: 'Streamlining workflows & processes',
-    description: 'Making the way work gets done simpler, faster, or more efficient.',
+    description: 'Make work simpler and faster.',
   },
   {
     value: 'search',
     emoji: '📄',
     label: 'Finding, organizing & summarizing information',
-    description: 'Making it easier to search, understand, and manage information.',
+    description: 'Make documents easier to use.',
   },
   {
     value: 'analysis',
     emoji: '📊',
     label: 'Data analysis & reporting',
-    description: 'Using data to generate insights, summaries, or reports.',
+    description: 'Turn data into insight.',
   },
   {
     value: 'comms',
     emoji: '💬',
     label: 'Communication & collaboration',
-    description: 'Improving communication, information sharing, and teamwork.',
+    description: 'Work together better.',
   },
   {
     value: 'content',
     emoji: '💡',
     label: 'Content & idea creation',
-    description: 'Creating, drafting, brainstorming, or developing new ideas.',
+    description: 'Draft, brainstorm, create.',
   },
   {
     value: 'opportunity',
     emoji: '🌱',
     label: 'Exploring a new idea or opportunity',
-    description: 'Exploring a potential AI opportunity without a specific problem yet.',
+    description: 'No specific problem yet.',
   },
   {
     value: 'unsure',
     emoji: '🤔',
     label: 'Not sure yet',
-    description: "That's completely okay — you can explore possibilities during the AI Builders' Day.",
+    description: 'Decide on the day.',
   },
 ];
 
