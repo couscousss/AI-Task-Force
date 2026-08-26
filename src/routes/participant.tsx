@@ -609,7 +609,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             {/* 9. Hopes */}
             <div class={fieldClass(errors['hopes'])}>
               <label for="hopes">
-                What do you hope to accomplish during the Builders' Day?{' '}
+                What do you hope to accomplish during the AI Builders' Day?{' '}
                 <span class="optional">optional</span>
               </label>
               <textarea

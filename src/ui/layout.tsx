@@ -44,7 +44,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = ({
             page is a handout rather than a screen. */}
         <footer class="colophon no-print">
           <p>
-            Built by the SECC AI Task Force &amp; Claude <span aria-hidden="true">:)</span>
+            Built by SECC AI Task Force and Claude <span aria-hidden="true">:)</span>
           </p>
         </footer>
         {(scripts ?? []).map((src) => (
