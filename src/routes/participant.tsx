@@ -587,9 +587,9 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
                 Can you bring a personal laptop? <span class="req" aria-hidden="true">*</span>
               </legend>
               <p class="hint" id="laptop-hint">
-                We ask because personal machines usually let you install tools and reach AI services that
-                locked-down corporate builds block. It changes what your team can actually build on the
-                day, so we make sure every team has enough of them.
+                We ask because personal machines usually let you install tools and reach other AI
+                services. It changes what your team can actually build on the day, so we make sure every
+                team has enough of them.
               </p>
               <div class="choices">
                 <label class="choice">
