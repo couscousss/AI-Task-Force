@@ -63,9 +63,7 @@ const FIELD_META: Record<string, FieldMeta> = {
   email: { label: 'Your email', anchor: 'email' },
   department: { label: 'Cluster', anchor: 'department' },
   problem_statement: { label: 'The work challenge', anchor: 'problem_statement' },
-  // Anchors the fieldset, not an input: this is a radio group, so there is no single
-  // element called `category` to jump to.
-  category: { label: 'What you want to explore', anchor: 'field-category' },
+  category: { label: 'What you want to explore', anchor: 'category' },
   skill_understanding: { label: 'AI Understanding', anchor: 'field-skill-understanding' },
   skill_tools: { label: 'AI Tools', anchor: 'field-skill-tools' },
   skill_prompting: { label: 'Prompting', anchor: 'field-skill-prompting' },
@@ -469,52 +467,40 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
             </div>
 
             {/* 6. Category */}
-            {/* A list rather than a dropdown: each area carries a line explaining it, and a
-                native <option> can only hold flat text. Same .choice markup as the attending
-                question, so it already reads and behaves correctly on a phone. */}
-            <fieldset
-              id="field-category"
-              class={errors['category'] ? 'field-invalid' : undefined}
-              aria-invalid={errors['category'] ? 'true' : undefined}
-              aria-describedby={describedBy('category-hint', errors['category'] && 'err-category')}
-            >
-              <legend class="fieldset-legend">
+            <div class={fieldClass(errors['category'])}>
+              <label for="category">
                 Which area best relates to the work challenge you would like to explore?{' '}
                 <span class="req" aria-hidden="true">
                   *
                 </span>
-              </legend>
+              </label>
               <p class="hint" id="category-hint">
-                The closest fit is fine — "Not sure yet" is a real answer.
+                The closest fit is fine
               </p>
-              <div class="choices">
+              {/* An <option> holds flat text only, so the explanation is joined onto the label
+                  rather than sitting under it. That keeps both the compact control and the
+                  wording, at the cost of a long line in the longest few. */}
+              <select
+                id="category"
+                name="category"
+                required
+                disabled={readOnly}
+                aria-invalid={errors['category'] ? 'true' : undefined}
+                aria-describedby={describedBy('category-hint', errors['category'] && 'err-category')}
+              >
+                <option value="">Choose one</option>
                 {CATEGORIES.map((c) => (
-                  <label class="choice">
-                    <input
-                      type="radio"
-                      name="category"
-                      value={c.value}
-                      checked={v.category === c.value}
-                      required
-                      disabled={readOnly}
-                    />
-                    <span>
-                      <span class="choice-label">
-                        {/* Decorative: a screen reader announcing "gear emoji" before every
-                            option is noise, and the label already says what the area is. */}
-                        <span aria-hidden="true">{c.emoji}</span> {c.label}
-                      </span>
-                      <span class="choice-desc">{c.description}</span>
-                    </span>
-                  </label>
+                  <option value={c.value} selected={v.category === c.value}>
+                    {`${c.emoji} ${c.label} — ${c.description}`}
+                  </option>
                 ))}
-              </div>
+              </select>
               {errors['category'] ? (
                 <p class="error-text" id="err-category">
                   {errors['category']}
                 </p>
               ) : null}
-            </fieldset>
+            </div>
 
             {/* 7. Capability */}
             <h2>Your AI capability today</h2>
