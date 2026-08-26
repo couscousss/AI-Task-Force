@@ -313,8 +313,7 @@ function FormPage({ cfg, row, values: v, errors, phase, blocked, action }: FormP
         {phase === 'open' && row.submitted_at && Object.keys(errors).length === 0 ? (
           <Callout tone="good" title="Saved">
             <p>
-              We have your answers{row.name ? `, ${row.name}` : ''}. Change anything below and save again
-              — the newest version wins.
+              We have your answers{row.name ? `, ${row.name}` : ''}. Change anything below and save again.
             </p>
             {/* This browser is remembered, so the shared link lands here rather than on a
                 blank form. On a machine somebody else also uses, that is the wrong person —
@@ -708,9 +707,12 @@ function ConfirmationPage({ cfg, row, phase }: { cfg: EventConfig; row: Particip
               this link before {deadline} and change your answer.
             </p>
           ) : (
+            // Deliberately does not name a channel: sending mail from the app is optional and
+            // off by default, and even configured the organizer chooses when to send — so
+            // promising an email is a promise the app cannot keep on its own.
             <p>
-              That is everything we need. We will email you your team and your project before {eventDay}.
-              You can change any of this until {deadline}.
+              That is everything we need. You will get your team and your project before {eventDay}. You
+              can change any of this until {deadline}.
             </p>
           )}
         </Callout>

@@ -106,13 +106,39 @@ export async function ensureInvite(
     submitted_at: null,
     updated_at: nowIso(),
   };
-  await db
-    .prepare(
-      `INSERT INTO participants (id, token, email, name, updated_at) VALUES (?, ?, ?, ?, ?)`,
-    )
-    .bind(row.id, row.token, row.email, row.name, row.updated_at)
-    .run();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO participants (id, token, email, name, updated_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(row.id, row.token, row.email, row.name, row.updated_at)
+      .run();
+  } catch (err) {
+    // The lookup above and this insert are two round trips, so two requests carrying the
+    // same address can both find nothing and both try to insert. `email` is UNIQUE, so the
+    // second one loses — which is the database doing its job, not a failure to report.
+    //
+    // This is not exotic: it is one person tapping Save twice on a slow phone, which at a
+    // department-sized turnout will happen to somebody. Left unhandled it renders "Something
+    // went wrong" over an answer that saved perfectly well.
+    //
+    // Anything that is *not* the uniqueness collision still throws.
+    if (!isUniqueViolation(err)) throw err;
+    const raced = await getByEmail(db, email);
+    if (!raced) throw err;
+    return { row: raced, created: false };
+  }
   return { row, created: true };
+}
+
+/**
+ * D1 surfaces constraint failures as a message rather than a code, and the wording has
+ * varied between the local emulator and production, so this matches on the parts that have
+ * been stable in both rather than on an exact string.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err)).toUpperCase();
+  return message.includes('UNIQUE') && message.includes('CONSTRAINT');
 }
 
 export interface FormSubmission {
