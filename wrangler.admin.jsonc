@@ -1,9 +1,16 @@
+// The ORGANIZER Worker. Deployed separately from the public one so that Cloudflare
+// Access can be switched on for the whole of it — see src/admin.tsx for why.
+//
+// Same D1 database as the public Worker, so there is one copy of the data.
+//
+// PUBLIC_ORIGIN must point at the PUBLIC Worker: it is what the "link to share" on the
+// dashboard and every personal link in the participants table are built from. The deploy
+// workflow overwrites it with the real URL, so it stays right even if that Worker is
+// renamed.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // The public hostname is <name>.<account subdomain>.workers.dev, so this is the half of
-  // the shared link that is set here. The account subdomain is dashboard-only.
-  "name": "builderday",
-  "main": "src/index.tsx",
+  "name": "builderday-admin",
+  "main": "src/admin.tsx",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
@@ -26,11 +33,6 @@
     }
   ],
 
-  // Runs hourly; the handler itself decides whether it is 09:00 on a weekday in the
-  // event's local timezone. Keeps the timezone a config value rather than a cron edit.
-  "triggers": {
-    "crons": ["0 * * * *"]
-  },
 
   "vars": {
     "EVENT_NAME": "SECC Inaugural AI Builder's Day",
@@ -43,7 +45,10 @@
     // Left empty on purpose: links are built from the request origin, so a fresh
     // deploy is correct with no configuration. Set it only if you send email, since the
     // reminder cron has no request to read an origin from.
-    "PUBLIC_ORIGIN": "",
+    // Overwritten by the deploy with the public Worker's real URL, so it stays correct
+    // across a rename or an account-subdomain change. This value is only the fallback for
+    // a deploy done by hand.
+    "PUBLIC_ORIGIN": "https://builderday.marcusfoo-work.workers.dev",
     "FROM_EMAIL": "AI Builder Day <builderday@example.org>",
     "MAX_REMINDERS": "2",
     "EXPECTED_PARTICIPANTS": "80",

@@ -3,38 +3,28 @@ import type { AppBindings } from './env';
 import type { Env } from './env';
 import { participantRoutes } from './routes/participant';
 import { publicTeamRoutes } from './routes/public-teams';
-import { adminRoutes } from './routes/admin';
 import { runReminderSweep } from './email/cron';
 import { Layout } from './ui/layout';
-import { loadConfig } from './config';
 
+/**
+ * The PUBLIC Worker: the check-in form and the projected team list, and nothing else.
+ *
+ * The organizer screens live in a separate Worker (src/admin.tsx) so that Cloudflare
+ * Access can be switched on for the whole of that one. Access attaches to a Worker or to
+ * a domain you own, and a workers.dev URL is neither yours nor path-scopable — so the only
+ * way to have company login on /admin without also putting the participant form behind a
+ * login is to make them two Workers. They share one D1 database.
+ */
 const app = new Hono<AppBindings>();
 
 app.route('/', participantRoutes);
 app.route('/', publicTeamRoutes);
-app.route('/admin', adminRoutes);
 
 app.get('/healthz', (c) => c.json({ ok: true }));
 
-app.get('/', (c) => {
-  const cfg = loadConfig(c.env);
-  return c.html(
-    <Layout title={cfg.eventName}>
-      <main class="narrow">
-        <h1>{cfg.eventName}</h1>
-        <p class="lede">
-          This page is for organizers. If you were invited, use the personal link that was emailed
-          to you — it takes you straight to your own form.
-        </p>
-        <p>
-          <a class="btn btn-secondary" href="/admin">
-            Organizer dashboard
-          </a>
-        </p>
-      </main>
-    </Layout>,
-  );
-});
+// The bare domain is the link an organizer shares with the whole department, so it goes
+// straight to the form rather than to a landing page nobody needs.
+app.get('/', (c) => c.redirect('/join', 302));
 
 app.notFound((c) => {
   return c.html(

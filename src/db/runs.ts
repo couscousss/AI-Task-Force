@@ -53,6 +53,25 @@ export async function failRun(db: D1Database, id: string, error: string): Promis
     .run();
 }
 
+/**
+ * Park the clustering output and hand the balancing step to the organizer's browser.
+ * Written before the solve so a reload, or a second tab, picks up exactly the same
+ * input — the seed is already on the run, so the result is identical either way.
+ */
+export async function saveClusterStage(
+  db: D1Database,
+  runId: string,
+  themes: Theme[],
+  warnings: string[],
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE grouping_runs SET status = 'awaiting_solve', progress = ?, themes_json = ? WHERE id = ?`,
+    )
+    .bind('Balancing teams in your browser', JSON.stringify({ themes, warnings }), runId)
+    .run();
+}
+
 export async function getRun(db: D1Database, id: string): Promise<GroupingRunRow | null> {
   return db.prepare(`SELECT * FROM grouping_runs WHERE id = ?`).bind(id).first<GroupingRunRow>();
 }
@@ -88,6 +107,7 @@ export async function saveRunResult(
   score: ScoreBreakdown,
   violations: Violation[],
   warnings: string[],
+  themeOf: Record<string, string> = {},
 ): Promise<void> {
   const statements: D1PreparedStatement[] = [];
   for (const t of teams) {
@@ -125,7 +145,7 @@ export async function saveRunResult(
       )
       .bind(
         `Done — ${teams.length} teams`,
-        JSON.stringify({ themes, warnings }),
+        JSON.stringify({ themes, warnings, theme_of: themeOf }),
         JSON.stringify(score),
         JSON.stringify(violations),
         nowIso(),
@@ -169,6 +189,34 @@ export async function getTeams(db: D1Database, runId: string): Promise<TeamWithM
     const b = byTeam.get(team.id)!;
     return { team, member_ids: b.ids, manual_overrides: b.manual };
   });
+}
+
+export interface PublishedTeam {
+  team: TeamRow;
+  member_ids: string[];
+}
+
+/** The team a participant sits on in the published run, or null when there is none. */
+export async function getPublishedTeamOf(
+  db: D1Database,
+  participantId: string,
+): Promise<PublishedTeam | null> {
+  const team = await db
+    .prepare(
+      `SELECT t.* FROM teams t
+       JOIN team_members tm ON tm.team_id = t.id
+       JOIN grouping_runs r ON r.id = t.run_id
+       WHERE r.is_published = 1 AND tm.participant_id = ?
+       LIMIT 1`,
+    )
+    .bind(participantId)
+    .first<TeamRow>();
+  if (!team) return null;
+  const members = await db
+    .prepare(`SELECT participant_id FROM team_members WHERE team_id = ?`)
+    .bind(team.id)
+    .all<{ participant_id: string }>();
+  return { team, member_ids: (members.results ?? []).map((m) => m.participant_id) };
 }
 
 export async function updateTeamMeta(
@@ -266,12 +314,25 @@ export function parseScore(row: GroupingRunRow): ScoreBreakdown | null {
   }
 }
 
-export function parseThemes(row: GroupingRunRow): { themes: Theme[]; warnings: string[] } {
-  if (!row.themes_json) return { themes: [], warnings: [] };
+export function parseThemes(row: GroupingRunRow): {
+  themes: Theme[];
+  warnings: string[];
+  /** participant id -> the theme key the solver scored against (post-merge bucket). */
+  themeOf: Record<string, string>;
+} {
+  if (!row.themes_json) return { themes: [], warnings: [], themeOf: {} };
   try {
-    const parsed = JSON.parse(row.themes_json) as { themes?: Theme[]; warnings?: string[] };
-    return { themes: parsed.themes ?? [], warnings: parsed.warnings ?? [] };
+    const parsed = JSON.parse(row.themes_json) as {
+      themes?: Theme[];
+      warnings?: string[];
+      theme_of?: Record<string, string>;
+    };
+    return {
+      themes: parsed.themes ?? [],
+      warnings: parsed.warnings ?? [],
+      themeOf: parsed.theme_of ?? {},
+    };
   } catch {
-    return { themes: [], warnings: [] };
+    return { themes: [], warnings: [], themeOf: {} };
   }
 }

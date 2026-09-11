@@ -46,13 +46,25 @@ export async function reserve(
   db: D1Database,
   participantId: string | null,
   kind: EmailKind,
-): Promise<string> {
+  dayKey: string,
+): Promise<string | null> {
   const id = newId();
-  await db
-    .prepare(`INSERT INTO email_log (id, participant_id, kind, sent_at, status) VALUES (?, ?, ?, ?, 'sending')`)
-    .bind(id, participantId, kind, nowIso())
-    .run();
-  return id;
+  try {
+    await db
+      .prepare(
+        `INSERT INTO email_log (id, participant_id, kind, sent_at, status, day_key)
+         VALUES (?, ?, ?, ?, 'sending', ?)`,
+      )
+      .bind(id, participantId, kind, nowIso(), dayKey)
+      .run();
+    return id;
+  } catch (err) {
+    // A unique-index violation means someone else already reserved this person for this
+    // kind today — a concurrent cron, or a second click. Skip them; do not send.
+    const message = err instanceof Error ? err.message : String(err);
+    if (/UNIQUE|constraint/i.test(message)) return null;
+    throw err;
+  }
 }
 
 export async function markSent(db: D1Database, logId: string, providerId: string | null): Promise<void> {
@@ -63,8 +75,10 @@ export async function markSent(db: D1Database, logId: string, providerId: string
 }
 
 export async function markFailed(db: D1Database, logId: string, reason: string): Promise<void> {
+  // Clearing day_key releases the once-per-day slot, so a failed send can be retried.
+  // SQLite treats NULLs as distinct in a unique index, so several failures can coexist.
   await db
-    .prepare(`UPDATE email_log SET status = ?, sent_at = sent_at WHERE id = ?`)
+    .prepare(`UPDATE email_log SET status = ?, day_key = NULL WHERE id = ?`)
     .bind(`failed: ${reason}`.slice(0, 300), logId)
     .run();
 }

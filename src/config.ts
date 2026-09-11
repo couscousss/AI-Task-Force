@@ -44,23 +44,120 @@ export const SKILL_SCALE: { value: 1 | 2 | 3 | 4 | 5; name: string; description:
 ];
 
 /**
- * [DECIDE] resolved: kept the spec's starter list verbatim, with stable machine keys so
- * that renaming a label later does not orphan data already collected. See DECISIONS.md.
+ * The areas someone can pick for their work challenge.
+ *
+ * [DECIDE] resolved: the spec's starter list has since been replaced wholesale by the
+ * organizer's own eight areas. What survived from that decision is the part that mattered —
+ * stable machine keys, so rewording a label never orphans data already collected. See
+ * DECISIONS.md.
+ *
+ * `value` is the machine key and is what lands in the database, so five of these keep the
+ * keys they were first shipped with even though their wording has moved on — an answer
+ * given on day one still resolves to the right area. Only genuinely new areas get new keys.
+ *
+ * `emoji` is decoration for the participant form only. It is deliberately not part of
+ * `label`, so the CSV export, the participants table and the clustering prompt stay plain
+ * text.
  */
-export const CATEGORIES: { value: string; label: string }[] = [
-  { value: 'automate', label: 'Automating a manual process' },
-  { value: 'search', label: 'Searching or summarizing documents' },
-  { value: 'analysis', label: 'Data analysis and reporting' },
-  { value: 'product', label: 'A customer or user-facing tool' },
-  { value: 'content', label: 'Content and drafting' },
-  { value: 'unsure', label: 'Not sure yet' },
+export const CATEGORIES: { value: string; label: string; description: string; emoji: string }[] = [
+  {
+    value: 'automate',
+    emoji: '⚙️',
+    label: 'Automating repetitive tasks',
+    description: 'Cut out manual steps.',
+  },
+  {
+    value: 'workflows',
+    emoji: '🚀',
+    label: 'Streamlining workflows & processes',
+    description: 'Make work simpler and faster.',
+  },
+  {
+    value: 'search',
+    emoji: '📄',
+    label: 'Finding, organizing & summarizing information',
+    description: 'Make documents easier to use.',
+  },
+  {
+    value: 'analysis',
+    emoji: '📊',
+    label: 'Data analysis & reporting',
+    description: 'Turn data into insight.',
+  },
+  {
+    value: 'comms',
+    emoji: '💬',
+    label: 'Communication & collaboration',
+    description: 'Work together better.',
+  },
+  {
+    value: 'content',
+    emoji: '💡',
+    label: 'Content & idea creation',
+    description: 'Draft, brainstorm, create.',
+  },
+  {
+    value: 'opportunity',
+    emoji: '🌱',
+    label: 'Exploring a new idea or opportunity',
+    description: 'No specific problem yet.',
+  },
+  {
+    value: 'unsure',
+    emoji: '🤔',
+    label: 'Not sure yet',
+    description: 'Decide on the day.',
+  },
 ];
+
+/**
+ * Options that were offered once and are not any more.
+ *
+ * Withdrawing an option from the form does not withdraw it from the rows already saved
+ * against it. `categoryLabel` falls back to the raw stored value, so dropping a value from
+ * CATEGORIES alone would print `product` into the CSV export, the participants table, the
+ * dashboard breakdown and the clustering prompt. Keeping the label here means an answer
+ * given before the change still reads as a sentence.
+ *
+ * Not part of CATEGORY_VALUES, so a new submission carrying one is still rejected, and the
+ * form no longer offers it.
+ */
+const RETIRED_CATEGORIES: Record<string, string> = {
+  product: 'A user-facing tool',
+};
 
 export const CATEGORY_VALUES = CATEGORIES.map((c) => c.value);
 
 export function categoryLabel(value: string | null | undefined): string {
   if (!value) return 'Not specified';
-  return CATEGORIES.find((c) => c.value === value)?.label ?? value;
+  const live = CATEGORIES.find((c) => c.value === value);
+  if (live) return live.label;
+  return RETIRED_CATEGORIES[value] ?? value;
+}
+
+/**
+ * The clusters somebody can belong to.
+ *
+ * A fixed list rather than free text, because this value is compared for equality when the
+ * solver spreads people across clusters. Typed in by hand, "HQ", "hq" and "H.Q." are three
+ * different clusters as far as that scoring is concerned, and the mixing quietly stops
+ * working without anything looking wrong.
+ *
+ * The label is stored directly — there is no separate machine key, because these are the
+ * organisation's own names and are what an organizer wants to read in the CSV.
+ */
+export const CLUSTERS: string[] = [
+  'Air Ops C3',
+  'Embedded Teams / C3 CentEx',
+  'HQ',
+  'Maritime Ops',
+  'Smart Camps & Bases',
+  'WOG Ops C3',
+  'NSI',
+];
+
+export function isValidCluster(v: unknown): v is string {
+  return typeof v === 'string' && CLUSTERS.includes(v);
 }
 
 export const ATTENDING = {
@@ -144,6 +241,8 @@ export interface EventConfig {
   organizerEmails: string[];
   /** Public origin, used to build participant links in emails. Overridable: PUBLIC_ORIGIN */
   publicOrigin: string;
+  /** True when PUBLIC_ORIGIN was actually set, rather than falling back to the default. */
+  publicOriginConfigured: boolean;
   fromEmail: string;
   maxReminders: number;
   expectedParticipants: number;
@@ -154,14 +253,15 @@ export interface EventConfig {
 }
 
 export const EVENT_DEFAULTS: EventConfig = {
-  eventName: 'SECC AI Builder Day',
-  eventDate: '2026-09-18',
-  formOpens: '2026-09-04T09:00:00+08:00',
+  eventName: "SECC Inaugural AI Builder's Day",
+  eventDate: '2026-09-22',
+  formOpens: '2026-08-01T09:00:00+08:00',
   formDeadline: '2026-09-15T17:00:00+08:00',
   localUtcOffsetHours: 8,
   reminderLocalHour: 9,
   organizerEmails: [],
   publicOrigin: 'http://localhost:8787',
+  publicOriginConfigured: false,
   fromEmail: 'AI Builder Day <builderday@example.org>',
   maxReminders: 2,
   expectedParticipants: 80,
@@ -203,6 +303,7 @@ export function loadConfig(env: Env): EventConfig {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     publicOrigin: str(env.PUBLIC_ORIGIN, d.publicOrigin).replace(/\/+$/, ''),
+    publicOriginConfigured: typeof env.PUBLIC_ORIGIN === 'string' && env.PUBLIC_ORIGIN.trim() !== '',
     fromEmail: str(env.FROM_EMAIL, d.fromEmail),
     maxReminders: num(env.MAX_REMINDERS, d.maxReminders),
     expectedParticipants: num(env.EXPECTED_PARTICIPANTS, d.expectedParticipants),
@@ -211,4 +312,33 @@ export function loadConfig(env: Env): EventConfig {
     turnstileSiteKey: optStr(env.TURNSTILE_SITE_KEY, d.turnstileSiteKey),
     devAdminEmail: optStr(env.DEV_ADMIN_EMAIL, d.devAdminEmail),
   };
+}
+
+/**
+ * The origin to build participant links from.
+ *
+ * Uses PUBLIC_ORIGIN when it is set. Otherwise it takes the origin of the request being
+ * served, so a fresh deploy shows correct links with no configuration at all — the
+ * dashboard cannot end up handing out a localhost link to a whole department.
+ *
+ * The cron has no request to read, which is why the email screen still warns when
+ * PUBLIC_ORIGIN looks local: outbound mail is the one place this cannot be inferred.
+ */
+export function originFor(cfg: EventConfig, requestUrl: string): string {
+  if (cfg.publicOriginConfigured) return cfg.publicOrigin;
+  try {
+    return new URL(requestUrl).origin;
+  } catch {
+    return cfg.publicOrigin;
+  }
+}
+
+/**
+ * `loadConfig` with `publicOrigin` already resolved against the current request. Use this
+ * anywhere a link is shown to a human; the plain `loadConfig` is enough elsewhere.
+ */
+export function loadConfigFor(env: Env, requestUrl: string): EventConfig {
+  const cfg = loadConfig(env);
+  if (cfg.publicOriginConfigured) return cfg;
+  return { ...cfg, publicOrigin: originFor(cfg, requestUrl) };
 }

@@ -1,0 +1,135 @@
+name: Deploy
+
+# Deploys from GitHub's machines, so nothing has to be installed on your own computer.
+#
+# One-time setup, all in the browser:
+#   1. Cloudflare dashboard -> My Profile -> API Tokens -> Create Token
+#        -> "Edit Cloudflare Workers" template
+#        -> add the "D1: Edit" permission as well
+#      Copy the token.
+#   2. This repo -> Settings -> Secrets and variables -> Actions -> New repository secret
+#        Name:  CLOUDFLARE_API_TOKEN     Value: the token you just copied
+#        Name:  CLOUDFLARE_ACCOUNT_ID    Value: the Account ID from your Cloudflare
+#                                               dashboard sidebar
+#   3. This repo -> Actions -> Deploy -> Run workflow
+#
+# After that, every run redeploys. The URL is printed in the summary at the end.
+
+on:
+  # Every push to the working branch deploys itself, so a change is live a couple of
+  # minutes after it is made without anyone pressing anything. The typecheck and the
+  # solver tests run first, so a broken push stops before it reaches the Worker.
+  push:
+    branches:
+      - claude/web-application-k0lv8g
+  # Still available by hand — for redeploying after changing a secret or a var in the
+  # Cloudflare dashboard, where nothing has been pushed.
+  workflow_dispatch:
+
+# Two deploys at once would race on the database id, so let one finish first.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check the secrets are set
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ]  || missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing"
+            echo "Add them under Settings -> Secrets and variables -> Actions."
+            echo "The steps are in the comment at the top of .github/workflows/deploy.yml."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Wrangler 4 requires Node >= 22. On 20 it installs with an EBADENGINE
+          # warning and then fails at runtime, which is easy to miss in the log.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Catch a broken build here rather than after it is live.
+      - name: Check types and run the solver tests
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Create or find the database
+        run: node scripts/provision-d1.mjs
+
+      - name: Apply the schema
+        run: npx wrangler d1 migrations apply secc-builder-day --remote
+
+      - name: Deploy the public Worker
+        id: deploy
+        run: |
+          npm run build:solver
+          npm run deploy:public 2>&1 | tee public.log
+          url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' public.log | head -1 || true)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # PUBLIC_ORIGIN is passed in rather than read from the file, so the links the
+      # dashboard hands out follow the public Worker even if it is renamed.
+      - name: Deploy the admin Worker
+        id: deploy_admin
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          if [ -n "$url" ]; then
+            npx wrangler deploy -c wrangler.admin.jsonc --var "PUBLIC_ORIGIN:$url" 2>&1 | tee admin.log
+          else
+            npx wrangler deploy -c wrangler.admin.jsonc 2>&1 | tee admin.log
+          fi
+          admin_url="$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' admin.log | head -1 || true)"
+          echo "url=$admin_url" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        run: |
+          url="${{ steps.deploy.outputs.url }}"
+          admin="${{ steps.deploy_admin.outputs.url }}"
+          {
+            echo "## Deployed"
+            echo
+            if [ -n "$url" ]; then
+              echo "**Share this link with your department:** $url"
+              echo
+              echo "Published teams (for the projector): $url/teams"
+            else
+              echo "Public Worker deployed, but its URL was not in the log — check the step above."
+            fi
+            echo
+            if [ -n "$admin" ]; then
+              echo "**Organizer dashboard:** $admin"
+            fi
+            echo
+            echo "### The admin Worker needs Cloudflare Access"
+            echo
+            echo "It is a separate Worker so that Access can cover all of it, which is the"
+            echo "only way to protect the organizer screens on a workers.dev URL without"
+            echo "also putting the participant form behind a login."
+            echo
+            echo "Until Access is on, the admin Worker refuses every request — including"
+            echo "yours. That is deliberate: it fails shut rather than open."
+            echo
+            echo "**You do not have to do this by hand.** Run the"
+            echo "**Protect the admin dashboard** workflow, which creates the Access"
+            echo "application and the policy for you and then reads them back to check."
+            echo "Its first run needs two extra permissions on the API token you already"
+            echo "have — the workflow file says which, and editing a token does not change"
+            echo "its secret."
+            echo
+            echo "Do not put Access on the public Worker — the form and the team list must"
+            echo "stay open."
+          } >> "$GITHUB_STEP_SUMMARY"
