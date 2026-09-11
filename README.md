@@ -133,8 +133,13 @@ people waiting. Everything here is reachable from `/admin`.*
 Open **`/teams`** on the room's projector. That is the published team list. It is a plain
 read-only page, it prints, and it needs no login.
 
+Participants do not need the projector: once a run is published, the shared **`/join`**
+link shows each person their own team and brief — straight away on the device they signed
+up from, or after typing their email on any other device.
+
 If it says no teams are published, go to **Grouping runs**, open the most recent finished
-run, check it over, and press **Publish teams**.
+run, check it over, and press **Publish teams**. The same review board has **Take the teams
+down** if you need to pull them back.
 
 ### Someone did not show up
 

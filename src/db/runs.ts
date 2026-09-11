@@ -191,6 +191,34 @@ export async function getTeams(db: D1Database, runId: string): Promise<TeamWithM
   });
 }
 
+export interface PublishedTeam {
+  team: TeamRow;
+  member_ids: string[];
+}
+
+/** The team a participant sits on in the published run, or null when there is none. */
+export async function getPublishedTeamOf(
+  db: D1Database,
+  participantId: string,
+): Promise<PublishedTeam | null> {
+  const team = await db
+    .prepare(
+      `SELECT t.* FROM teams t
+       JOIN team_members tm ON tm.team_id = t.id
+       JOIN grouping_runs r ON r.id = t.run_id
+       WHERE r.is_published = 1 AND tm.participant_id = ?
+       LIMIT 1`,
+    )
+    .bind(participantId)
+    .first<TeamRow>();
+  if (!team) return null;
+  const members = await db
+    .prepare(`SELECT participant_id FROM team_members WHERE team_id = ?`)
+    .bind(team.id)
+    .all<{ participant_id: string }>();
+  return { team, member_ids: (members.results ?? []).map((m) => m.participant_id) };
+}
+
 export async function updateTeamMeta(
   db: D1Database,
   teamId: string,

@@ -608,6 +608,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .project-team h2 { margin-bottom: 0.15rem; font-size: 1.4rem; }
 .project-team ol { margin: 0.6rem 0 0; padding-left: 1.3rem; }
 
+/* ---------- your team (participant view) ---------- */
+
+.team-theme { margin: 0 0 0.25rem; color: var(--ink-2); font-size: 0.92rem; }
+.team-brief { font-size: 1.05rem; }
+.team-members { list-style: none; margin: 0; padding: 0; }
+.team-members li {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; align-items: baseline;
+  padding: 0.6rem 0; border-top: 1px solid var(--line);
+}
+.team-members li:first-child { border-top: 0; }
+.team-members .muted { font-size: 0.9rem; }
+
 @media print {
   @page { margin: 12mm; }
   body { background: #fff; color: #000; font-size: 11pt; }

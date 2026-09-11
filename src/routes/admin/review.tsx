@@ -19,6 +19,7 @@ import {
   parseThemes,
   publishRun,
   replaceMembership,
+  unpublishAll,
   updateTeamMeta,
   type TeamWithMembers,
 } from '../../db/runs';
@@ -219,6 +220,7 @@ reviewRoutes.get('/:runId', async (c) => {
   const url = new URL(c.req.url);
   const saved = url.searchParams.get('saved') === '1';
   const published = url.searchParams.get('published') === '1';
+  const unpublished = url.searchParams.get('unpublished') === '1';
   const moved = url.searchParams.get('moved');
   const confirmPublish = url.searchParams.get('confirm') === 'publish';
 
@@ -285,7 +287,14 @@ reviewRoutes.get('/:runId', async (c) => {
       {published ? (
         <Callout tone="good" title="Teams published">
           These are now the canonical teams. Anyone can see them at <a href="/teams">/teams</a> — that
-          page shows names only and is what you project on the day.
+          page shows names only and is what you project on the day. The shared /join link now shows
+          each person their own team and brief.
+        </Callout>
+      ) : null}
+      {unpublished ? (
+        <Callout tone="good" title="Teams taken down">
+          Nothing is published now: <a href="/teams">/teams</a> says the teams are not out yet, and the
+          shared /join link is the form again. Publish this run, or another, when you are ready.
         </Callout>
       ) : null}
       {saved ? (
@@ -301,8 +310,16 @@ reviewRoutes.get('/:runId', async (c) => {
 
       {run.is_published === 1 ? (
         <Callout tone="info" title="This run is published">
-          Everything you save here goes live on <a href="/teams">/teams</a> immediately — which is what
-          you want when someone does not turn up, and worth knowing before you start experimenting.
+          <p>
+            Everything you save here goes live on <a href="/teams">/teams</a> and the shared /join link
+            immediately — which is what you want when someone does not turn up, and worth knowing before
+            you start experimenting.
+          </p>
+          <form method="post" action={`/admin/review/${runId}/unpublish`}>
+            <button class="btn btn-secondary btn-small" type="submit">
+              Take the teams down
+            </button>
+          </form>
         </Callout>
       ) : null}
 
@@ -734,6 +751,22 @@ reviewRoutes.post('/:runId/publish', async (c) => {
   }
   await publishRun(c.env.DB, runId);
   return c.redirect(`/admin/review/${runId}?published=1`, 303);
+});
+
+/**
+ * Reversible, so no confirmation step: publishing again puts the teams straight back.
+ * Clears whichever run is published rather than only this one, so a stale board cannot
+ * leave a different run showing.
+ */
+reviewRoutes.post('/:runId/unpublish', async (c) => {
+  if (!originLooksSane(c)) {
+    return c.text('That request did not come from this site. Reload the page and try again.', 403);
+  }
+  const runId = c.req.param('runId');
+  const run = await getRun(c.env.DB, runId);
+  if (!run) return reviewNotFound();
+  await unpublishAll(c.env.DB);
+  return c.redirect(`/admin/review/${runId}?unpublished=1`, 303);
 });
 
 function reviewNotFound(): Response {

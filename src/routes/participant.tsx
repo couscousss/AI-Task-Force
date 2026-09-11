@@ -19,9 +19,11 @@ import {
   ensureInvite,
   getByEmail,
   getByToken,
+  listByIds,
   saveSubmission,
   type FormSubmission,
 } from '../db/participants';
+import { getPublishedRun, getPublishedTeamOf, type PublishedTeam } from '../db/runs';
 import { formatLocalDate, formatLocalDateTime, isPast } from '../lib/dates';
 import { verifyTurnstile } from '../lib/turnstile';
 import {
@@ -789,6 +791,151 @@ function UnknownLinkPage({ cfg }: { cfg: EventConfig }) {
   );
 }
 
+/**
+ * What `/join` and the personal link turn into once a run is published: the person's own
+ * team and its brief, instead of a form they can no longer usefully edit. Teammates are
+ * shown by name and cluster so people can find each other in the room; emails stay off
+ * the page because the email-lookup path reaches it without any authentication.
+ */
+function TeamPage({
+  cfg,
+  mine,
+  members,
+  viewerId,
+  answersHref,
+}: {
+  cfg: EventConfig;
+  mine: PublishedTeam;
+  members: ParticipantRow[];
+  viewerId: string;
+  /** This person's read-only form. Absent on the email-lookup path, which must not hand out a token. */
+  answersHref?: string;
+}) {
+  const eventDay = formatLocalDate(cfg.eventDate, cfg.localUtcOffsetHours);
+  const team = mine.team;
+  const teamName = squish(team.name) || `Team ${team.sort_order + 1}`;
+  const brief = (team.project_brief ?? '').trim();
+  const theme = squish(team.theme_label);
+  const UNNAMED = 'Name not recorded';
+  // The viewer first, then everyone else alphabetically: it is their page.
+  const ordered = [...members].sort((a, b) => {
+    if (a.id === viewerId) return -1;
+    if (b.id === viewerId) return 1;
+    return (squish(a.name) || UNNAMED).localeCompare(squish(b.name) || UNNAMED);
+  });
+
+  return (
+    <Layout title={`Your team — ${cfg.eventName}`}>
+      <main class="narrow" id="main">
+        <p class="muted small">
+          {cfg.eventName} · {eventDay}
+        </p>
+        <h1>Your team</h1>
+        <Card>
+          {theme ? <p class="team-theme">{theme}</p> : null}
+          <h2>{teamName}</h2>
+          <h3>Your project</h3>
+          <p class="team-brief">
+            {brief || 'The organizers have not written this team’s brief yet — check back nearer the day.'}
+          </p>
+          <h3>Who's with you</h3>
+          <ul class="team-members">
+            {ordered.map((m) => {
+              const cluster = squish(m.department);
+              return (
+                <li>
+                  <strong>{squish(m.name) || UNNAMED}</strong>
+                  {cluster ? <span class="muted">{cluster}</span> : null}
+                  {m.id === viewerId ? <span class="tag tag-yes">You</span> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+        <div class="grid">
+          <div class="btn-row">
+            <a class="btn" href="/teams">
+              See all the teams
+            </a>
+            {answersHref ? (
+              <a class="btn btn-secondary" href={answersHref}>
+                What you submitted
+              </a>
+            ) : null}
+          </div>
+        </div>
+        {organizerContact(cfg)}
+      </main>
+    </Layout>
+  );
+}
+
+/**
+ * The open link once teams are out and this browser is not remembered. One box, no
+ * account: the address they signed up with brings up their team. Nothing here can edit a
+ * record or set the remembering cookie — that would let anyone who types a colleague's
+ * address take over their answers, which is the defect the changelog already documents.
+ */
+function FindTeamPage({
+  cfg,
+  phase,
+  email,
+  error,
+}: {
+  cfg: EventConfig;
+  phase: Phase;
+  email?: string;
+  error?: string;
+}) {
+  const eventDay = formatLocalDate(cfg.eventDate, cfg.localUtcOffsetHours);
+  const head = cfg.turnstileSiteKey ? (
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  ) : undefined;
+  return (
+    <Layout title={`Find your team — ${cfg.eventName}`} head={head}>
+      <main class="narrow" id="main">
+        <p class="muted small">
+          {cfg.eventName} · {eventDay}
+        </p>
+        <h1>The teams are out</h1>
+        <p class="lede">
+          Enter the email address you signed up with and we will show you your team and your project.
+        </p>
+        {error ? (
+          <Callout tone="bad" title="Not found">
+            <p>{error}</p>
+          </Callout>
+        ) : null}
+        <form method="post" action="/join/team">
+          <div class={fieldClass(error)}>
+            <label for="email">Your email</label>
+            <input type="email" id="email" name="email" value={email ?? ''} autocomplete="email" required />
+          </div>
+          {cfg.turnstileSiteKey ? (
+            <div class="field" id="field-turnstile">
+              <div class="cf-turnstile" data-sitekey={cfg.turnstileSiteKey}></div>
+            </div>
+          ) : null}
+          <div class="btn-row">
+            <button class="btn" type="submit">
+              Show my team
+            </button>
+            <a class="btn btn-secondary" href="/teams">
+              See all the teams
+            </a>
+          </div>
+        </form>
+        {phase === 'open' ? (
+          <p class="small">
+            Have not filled in the form yet? <a href="/join?new=1">Fill it in now</a>.
+          </p>
+        ) : null}
+        {organizerContact(cfg)}
+      </main>
+    </Layout>
+  );
+}
+
 /* ---------------------------------------------------------------- handlers */
 
 /**
@@ -928,6 +1075,24 @@ participantRoutes.get('/r/:token', async (c) => {
   if (c.req.query('saved') === '1' && row.submitted_at) {
     return c.html(<ConfirmationPage cfg={cfg} row={row} phase={phase} />);
   }
+  // Once teams are published this link shows the person their team; ?form=1 is the way
+  // back to what they submitted. Until then, and for anyone not on a published team, it
+  // is the form exactly as before.
+  if (c.req.query('form') !== '1') {
+    const mine = await getPublishedTeamOf(c.env.DB, row.id);
+    if (mine) {
+      const members = await listByIds(c.env.DB, mine.member_ids);
+      return c.html(
+        <TeamPage
+          cfg={cfg}
+          mine={mine}
+          members={members}
+          viewerId={row.id}
+          answersHref={`/r/${row.token}?form=1`}
+        />,
+      );
+    }
+  }
   return c.html(<FormPage cfg={cfg} row={row} values={valuesFromRow(row)} errors={{}} phase={phase} />);
 });
 
@@ -1022,6 +1187,11 @@ participantRoutes.get('/join', async (c) => {
       if (known) return c.redirect(`/r/${known.token}`, 302);
       c.header('Set-Cookie', forgetCookie(c.req.url));
     }
+    // Not remembered here, but teams are out: the shared link becomes "find your team"
+    // rather than a blank form. ?new=1 still reaches the form for a genuine newcomer.
+    if (await getPublishedRun(c.env.DB)) {
+      return c.html(<FindTeamPage cfg={cfg} phase={phaseOf(cfg)} />);
+    }
   } else {
     c.header('Set-Cookie', forgetCookie(c.req.url));
   }
@@ -1036,6 +1206,54 @@ participantRoutes.get('/join', async (c) => {
       action="/join"
     />,
   );
+});
+
+/**
+ * The email lookup behind FindTeamPage. Deliberately stateless: it never sets the
+ * remembering cookie and never reveals a token, so knowing a colleague's address shows
+ * you their team — which /teams shows anyone anyway — and nothing more. One message
+ * covers "unknown address" and "known but not on a team", so the box cannot be used to
+ * check who has signed up.
+ */
+participantRoutes.post('/join/team', async (c) => {
+  const cfg = loadConfig(c.env);
+  const phase = phaseOf(cfg);
+  if (!(await getPublishedRun(c.env.DB))) return c.redirect('/join', 303);
+
+  const body = await c.req.parseBody();
+  const typed = squish(bodyField(body, 'email'));
+  const notFound =
+    'We could not find a team for that address. Check it is the one you signed up with, see the full list on the teams page, or ask the organizers.';
+
+  if (cfg.turnstileSiteKey) {
+    const ok = await verifyTurnstile(
+      c.env,
+      bodyField(body, 'cf-turnstile-response') || null,
+      c.req.header('CF-Connecting-IP') ?? null,
+    );
+    if (!ok) {
+      return c.html(
+        <FindTeamPage
+          cfg={cfg}
+          phase={phase}
+          email={typed}
+          error="The check that you are a person did not complete. Tick the box and try again."
+        />,
+        400,
+      );
+    }
+  }
+
+  if (!isValidEmail(typed)) {
+    return c.html(<FindTeamPage cfg={cfg} phase={phase} email={typed} error={notFound} />, 422);
+  }
+  const row = await getByEmail(c.env.DB, typed);
+  const mine = row ? await getPublishedTeamOf(c.env.DB, row.id) : null;
+  if (!row || !mine) {
+    return c.html(<FindTeamPage cfg={cfg} phase={phase} email={typed} error={notFound} />, 404);
+  }
+  const members = await listByIds(c.env.DB, mine.member_ids);
+  return c.html(<TeamPage cfg={cfg} mine={mine} members={members} viewerId={row.id} />);
 });
 
 participantRoutes.post('/join', async (c) => {
